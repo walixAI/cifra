@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@cifra/core": "workspace:*",
     "@cifra/db": "workspace:*",
     "@cifra/ui": "workspace:*",
     "next": "^15.1.6",

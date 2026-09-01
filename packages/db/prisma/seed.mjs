@@ -5,7 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { asegurarBaseLocal } from "../scripts/db-local.mjs";
+import { asegurarBaseLocal, asegurarContrasenaApp } from "../scripts/db-local.mjs";
 import { sembrarDatos } from "./datos-seed.mjs";
 
 const directorioPaquete = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -27,6 +27,11 @@ async function main() {
     env: process.env,
     stdio: "inherit",
   });
+
+  // rls.sql (dentro de la primera migración) crea `cifra_app` sin contraseña. En local le
+  // ponemos una para que apps/web pueda conectarse con ese rol y RLS se ejerza de verdad — no
+  // como `postgres`, que la ignora. En Neon esto no hace nada (el rol se gestiona aparte).
+  if (local.esLocal) await asegurarContrasenaApp();
 
   // Import diferido: el cliente generado no existe hasta que corrió `prisma generate`, y
   // conviene que ese error salga después del migrate deploy, no antes.

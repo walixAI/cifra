@@ -84,9 +84,15 @@ export async function levantarPgEmbebido(): Promise<PgEmbebido> {
     puerto,
     async detener() {
       await pg.stop();
-      // En Windows el proceso de postgres puede tardar un instante en soltar los handles del
-      // directorio de datos después de salir; reintentar evita un EBUSY espurio en la limpieza.
-      rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      // En Windows el proceso de postgres tarda un momento en soltar los handles del directorio
+      // de datos después de salir. Se reintenta borrar; si aun así no se puede, se deja el
+      // directorio (está en el temp del SO, se limpia solo) — un EBUSY en la limpieza no debe
+      // tumbar una corrida de pruebas que ya pasó.
+      try {
+        rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+      } catch (error) {
+        console.warn(`No se pudo borrar ${dataDir} (${(error as Error).message}); se deja al SO.`);
+      }
     },
   };
 }

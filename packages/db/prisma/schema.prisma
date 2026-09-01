@@ -278,8 +278,26 @@ model ResumenContribuyente {
 
   ingresos_centavos BigInt @default(0)
   gastos_centavos   BigInt @default(0)
-  iva_centavos      BigInt @default(0)
-  isr_centavos      BigInt @default(0)
+  iva_centavos      BigInt @default(0) // neto: trasladado − acreditable − retenido
+  isr_centavos      BigInt @default(0) // del periodo
+
+  // Desglose de IVA del periodo (§3.1) — lo que apps/trabajos escribe tras procesar el ledger
+  // completo. La pantalla de Impuestos lee de aquí, igual que la cartera del despacho lee de
+  // aquí y nunca recalcula (§6 de ARQUITECTURA-MULTIINQUILINO.md) — incluso para un solo
+  // contribuyente, sumar el libro mayor completo en cada carga de pantalla no escala.
+  iva_trasladado_centavos  BigInt @default(0)
+  iva_acreditable_centavos BigInt @default(0)
+  iva_retenido_centavos    BigInt @default(0)
+
+  // Insumos del ISR provisional acumulado (§3.2): base y pagos previos del ejercicio hasta
+  // este periodo, para que impuestos/isr.ts no tenga que releer el ejercicio completo.
+  ingresos_acumulados_centavos    BigInt @default(0)
+  deducciones_acumuladas_centavos BigInt @default(0)
+  isr_pagado_acumulado_centavos   BigInt @default(0)
+
+  // Retenciones a favor del periodo (panel "Retenciones a tu favor").
+  isr_retenido_pm_centavos     BigInt @default(0) // ISR retenido por clientes personas morales
+  isr_retenido_patron_centavos BigInt @default(0) // ISR retenido por el patrón (sueldos y salarios)
 
   cfdi_sin_clasificar       Int       @default(0)
   movimientos_sin_conciliar Int       @default(0)

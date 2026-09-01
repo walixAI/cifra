@@ -26,6 +26,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@cifra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@cifra/db':
         specifier: workspace:*
         version: link:../../packages/db

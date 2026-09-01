@@ -19,7 +19,8 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:generar": "node scripts/generar-migracion.mjs",
     "prisma:studio": "node scripts/studio.mjs",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "db:dev": "node scripts/dev-db.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"

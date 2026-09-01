@@ -345,9 +345,20 @@ export async function sembrarDatos(prisma) {
   // ── Declaraciones (histórico) ────────────────────────────────────────────────
   console.log("→ Declaraciones…");
 
+  // Los meses ya presentados (mayo–julio) guardan la cifra que se presentó: hecho histórico,
+  // se respeta tal cual del fixture. El mes abierto (agosto, `estimada`) guarda lo que Cifra
+  // ESTIMA hoy — que para el ISR es lo que da la tarifa real de 2026 (impuestos/isr.ts:
+  // $75,430.66), no los $14,320 del fixture, que nunca salieron de aplicar la tarifa real a
+  // la base del propio README. Ver packages/core/README.md. Así la pantalla de Impuestos no se
+  // contradice: el desglose en vivo y la fila del histórico del mes abierto dan lo mismo.
+  const ISR_AGOSTO_TARIFA_REAL = 7_543_066n; // calcularIsr(...) con tarifas/2026.json
+
   for (const h of datos.historicoImpuestos) {
-    const estado = h.estado === "presentada" ? "presentada" : "estimada";
+    const esCerrado = h.estado === "presentada";
+    const estado = esCerrado ? "presentada" : "estimada";
     const fecha_limite = new Date(`${h.periodo}-17`);
+    const isrCentavos = esCerrado ? BigInt(h.isr) : ISR_AGOSTO_TARIFA_REAL;
+
     await prisma.declaracion.create({
       data: {
         contribuyente_id: toda.id,
@@ -364,7 +375,7 @@ export async function sembrarDatos(prisma) {
         periodo: h.periodo,
         tipo: "isr_provisional",
         estado,
-        calculo: { del_periodo_centavos: String(h.isr) },
+        calculo: { del_periodo_centavos: String(isrCentavos) },
         fecha_limite,
       },
     });
@@ -381,14 +392,64 @@ export async function sembrarDatos(prisma) {
       periodo: "2026-08",
       ingresos_centavos: BigInt(datos.periodos.mes.ingresos),
       gastos_centavos: BigInt(datos.periodos.mes.gastos),
-      iva_centavos: BigInt(datos.periodos.mes.iva),
-      isr_centavos: BigInt(datos.periodos.mes.isr),
+      iva_centavos: BigInt(datos.periodos.mes.iva), // $8,420 — aritmética pura, coincide con el fixture
+      isr_centavos: ISR_AGOSTO_TARIFA_REAL, // $75,430.66 — tarifa real 2026, ver nota en Declaraciones
+
+      // Desglose de IVA (calculoIvaAgosto): esto es lo que la vertical de Impuestos (paso 5) le
+      // pasa directo a evaluarCuadreIva — no se recalcula sumando el ledger de una muestra de
+      // 11 CFDI ilustrativos, que nunca representó los 246 reales del periodo.
+      iva_trasladado_centavos: BigInt(datos.calculoIvaAgosto.trasladado),
+      iva_acreditable_centavos: BigInt(datos.calculoIvaAgosto.acreditable),
+      iva_retenido_centavos: BigInt(datos.calculoIvaAgosto.retenidoPorClientes),
+
+      // Insumos del ISR acumulado (calculoIsrAgosto): sí se le pasan tal cual a
+      // impuestos/isr.ts, que con la tarifa REAL de 2026 da un ISR distinto al de este fixture
+      // — ver packages/core/README.md.
+      ingresos_acumulados_centavos: BigInt(datos.calculoIsrAgosto.ingresosAcumulados),
+      deducciones_acumuladas_centavos: BigInt(datos.calculoIsrAgosto.deduccionesAcumuladas),
+      isr_pagado_acumulado_centavos: BigInt(datos.calculoIsrAgosto.pagosProvisionalesAnteriores),
+
+      isr_retenido_pm_centavos: BigInt(datos.retencionesAFavor.isrPorPersonasMorales),
+      isr_retenido_patron_centavos: BigInt(datos.retencionesAFavor.isrPorPatron),
+
       cfdi_sin_clasificar: cfdiSinClasificar,
       movimientos_sin_conciliar: datos.totales.movimientosSinCfdi,
       // §3.5: cuadra aritméticamente, pero con acreditable de un CFDI ya cancelado — warning.
       cuadre_estado: "warning",
       cierre_pasos_completos: pasosListos,
       proxima_obligacion: new Date(datos.calculoIvaAgosto.fechaLimite),
+    },
+  });
+
+  // ── Sincronización con el SAT (contrato de datos rancios, §7 del README) ────
+  console.log("→ Historial de sincronización con el SAT…");
+
+  // Igual que escenariosDePrueba.errSat de este mismo archivo: la última bajada buena fue ayer
+  // 19:40, y el intento de hoy a las 10:42 falló con 503. Es la situación que muestra el
+  // prototipo por default — la pantalla de Impuestos (paso 5) la lee de aquí, no de un query
+  // param de prueba.
+  await prisma.sincronizacionSat.create({
+    data: {
+      contribuyente_id: toda.id,
+      tipo: "cfdi",
+      estado: "ok",
+      iniciada_en: new Date("2026-08-29T19:35:00-06:00"),
+      terminada_en: new Date("2026-08-29T19:40:00-06:00"),
+      corte: new Date("2026-08-29T19:40:00-06:00"),
+      cfdi_nuevos: 6,
+    },
+  });
+  await prisma.sincronizacionSat.create({
+    data: {
+      contribuyente_id: toda.id,
+      tipo: "cfdi",
+      estado: "error",
+      iniciada_en: new Date("2026-08-30T10:42:00-06:00"),
+      terminada_en: null,
+      corte: null, // sin corte nuevo: se sigue sirviendo el de la sincronización anterior
+      codigo_error: "503",
+      mensaje_error: "El SAT no respondió (503).",
+      intentos: 3,
     },
   });
 
