@@ -1,0 +1,18 @@
+{
+  "ejercicio": 2026,
+  "fuente": "Anexo 8 de la Resolución Miscelánea Fiscal 2026, publicado en el DOF el 28 de diciembre de 2025 — tarifa mensual del artículo 96 de la LISR, vigente desde el 1 de enero de 2026.",
+  "notaDeUso": "Para el pago provisional acumulado (artículo 106 LISR) cada límite y la cuota fija se multiplican por los meses transcurridos del ejercicio antes de aplicar la tarifa — así lo hace impuestos/isr.ts, no se guardan aquí 12 tablas distintas.",
+  "tramosMensuales": [
+    { "limiteInferiorCentavos": 1, "limiteSuperiorCentavos": 84459, "cuotaFijaCentavos": 0, "porcentajeX10000": 192 },
+    { "limiteInferiorCentavos": 84460, "limiteSuperiorCentavos": 716851, "cuotaFijaCentavos": 1622, "porcentajeX10000": 640 },
+    { "limiteInferiorCentavos": 716852, "limiteSuperiorCentavos": 1259802, "cuotaFijaCentavos": 42095, "porcentajeX10000": 1088 },
+    { "limiteInferiorCentavos": 1259803, "limiteSuperiorCentavos": 1464464, "cuotaFijaCentavos": 101168, "porcentajeX10000": 1600 },
+    { "limiteInferiorCentavos": 1464465, "limiteSuperiorCentavos": 1753364, "cuotaFijaCentavos": 133914, "porcentajeX10000": 1792 },
+    { "limiteInferiorCentavos": 1753365, "limiteSuperiorCentavos": 3536283, "cuotaFijaCentavos": 185684, "porcentajeX10000": 2136 },
+    { "limiteInferiorCentavos": 3536284, "limiteSuperiorCentavos": 5573668, "cuotaFijaCentavos": 566516, "porcentajeX10000": 2352 },
+    { "limiteInferiorCentavos": 5573669, "limiteSuperiorCentavos": 10641050, "cuotaFijaCentavos": 1045709, "porcentajeX10000": 3000 },
+    { "limiteInferiorCentavos": 10641051, "limiteSuperiorCentavos": 14188066, "cuotaFijaCentavos": 2565923, "porcentajeX10000": 3200 },
+    { "limiteInferiorCentavos": 14188067, "limiteSuperiorCentavos": 42564199, "cuotaFijaCentavos": 3700969, "porcentajeX10000": 3400 },
+    { "limiteInferiorCentavos": 42564200, "limiteSuperiorCentavos": null, "cuotaFijaCentavos": 13348854, "porcentajeX10000": 3500 }
+  ]
+}
