@@ -6,7 +6,11 @@ con alcance, y las migraciones. Ver `handoff/ARQUITECTURA-MULTIINQUILINO.md`.
 ```
 prisma/schema.prisma          plataforma (tenancy.prisma) + entidades fiscales (paso 3)
 prisma/migrations/            _plataforma y _fiscal: tablas + rls.sql, cada una en su propia migración
+prisma/seed.mjs                orquesta: base de datos, migraciones, y datos-seed.mjs
+prisma/datos-seed.mjs         la carga real de handoff/datos/seed.json
+scripts/db-local.mjs          Postgres local persistente sin Docker (usado por seed y studio)
 scripts/generar-migracion.mjs autoría de migraciones nuevas sin Neon ni Docker (ver abajo)
+scripts/studio.mjs            `pnpm db:studio`
 src/cliente.ts                singleton sin alcance — solo plataforma, nunca datos con dinero
 src/alcance.ts                prismaPara(contribuyenteId) — el cliente que sí deben usar los handlers
 src/generated/client/         cliente de Prisma generado (gitignored, `pnpm prisma:generate`)
@@ -21,6 +25,46 @@ terminar), corre la migración exactamente como correría `prisma migrate deploy
 —tablas, rol `cifra_app`, políticas de `rls.sql`— y prueba el aislamiento conectada **como
 `cifra_app`**: no es dueña de las tablas ni superusuario, así que si alguna fila se cuela, es la
 política la que falló, no el test. No necesita `.env` ni Neon.
+
+## Sembrar datos: `pnpm db:seed` y `pnpm db:studio`
+
+Tampoco necesitan `.env` ni Neon para empezar:
+
+```bash
+pnpm db:seed      # carga handoff/datos/seed.json
+pnpm db:studio    # lo enseña
+```
+
+Si no hay `DATABASE_URL` en el entorno, ambos levantan un Postgres local **persistente** en
+`packages/db/.pgdata` (gitignored) — mismo binario embebido que las pruebas, pero los datos se
+quedan en disco entre corridas, como cualquier Postgres local. `db:seed` limpia y vuelve a
+sembrar cada vez que corre (solo en este Postgres propio — nunca si `DATABASE_URL` ya apunta a
+Neon: ahí el seed asume una base vacía y no borra nada por su cuenta).
+
+En cuanto haya un `.env` con `DATABASE_URL` apuntando a Neon (ver abajo), los dos comandos lo
+usan automáticamente y dejan en paz el Postgres local.
+
+Lo que carga el seed, dentro de una organización `personal`:
+
+- El contribuyente **TODA7606258I7** completo: constancia, 5 obligaciones, 14 cuentas del
+  catálogo, 3 cuentas bancarias, sus 11 CFDI (8 recibidos + 3 emitidos — el fixture trae más de
+  los "8" que menciona el paso 3 de `PRIMEROS-PASOS.md`; se cargó lo que hay en
+  `seed.json`, no una cuenta redonda), sus 5 pólizas con asientos que cuadran
+  (`SUM(debe) = SUM(haber)`, verificado), 8 movimientos bancarios por conciliar, notificaciones,
+  y el histórico de declaraciones.
+- El caso del CFDI cancelado después de contabilizado (§3.4 del README:
+  `3B77…A20` → póliza `D-0142` → alerta) queda enlazado de punta a punta.
+
+Y una organización `despacho` ("Despacho Aguilar y Asociados" — mismo nombre que ya aparece
+como emisor de honorarios contables en los gastos de TODA, a propósito) con:
+
+- Dos clientes propios, recién dados de alta, cada uno con su `Acceso` en estado `invitado` sin
+  usuario todavía — nadie ha iniciado sesión como ellos.
+- **El caso difícil de la §3**: TODA7606258I7 vinculado por un `Acceso` nuevo (rol `contador`,
+  usuario Ana) sobre el **mismo** registro de `Contribuyente` — su `organizacion_id` sigue
+  siendo el de la organización personal. Por diseño (§2 del documento de inquilinos, "un admin
+  de despacho no hereda acceso a los libros"), Ana **no** tiene acceso automático a los otros
+  dos clientes del despacho — solo a los que se le concedieron explícitamente.
 
 ## Conectar a Neon
 

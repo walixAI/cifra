@@ -11,7 +11,9 @@
     "build": "pnpm -r --if-present build",
     "start": "pnpm --filter @cifra/web start",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "db:seed": "pnpm --filter @cifra/db db:seed",
+    "db:studio": "pnpm --filter @cifra/db prisma:studio"
   },
   "devDependencies": {
     "typescript": "catalog:",

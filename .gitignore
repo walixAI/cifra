@@ -12,6 +12,7 @@ next-env.d.ts
 
 # prisma
 packages/db/src/generated/
+packages/db/.pgdata/
 
 # entorno — nunca CIEC, e.firma ni llaves reales
 .env

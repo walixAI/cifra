@@ -8,6 +8,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -15,7 +18,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:generar": "node scripts/generar-migracion.mjs",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "node scripts/studio.mjs",
+    "db:seed": "prisma db seed"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"
