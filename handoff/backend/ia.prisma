@@ -1,0 +1,271 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Cifra — modelos de la capa de IA
+//
+// Se agregan a backend/schema.prisma. TODOS llevan contribuyente_id no nulo y
+// quedan bajo RLS con rls.sql. Ver ARQUITECTURA-IA.md.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Capa 1 · Hechos ──────────────────────────────────────────────────────────
+
+enum ClaseEvento {
+  dominio   // cfdi.recibido, poliza.generada, sat.sincronizacion_fallida…
+  uso       // pantalla.vista, sugerencia.descartada, clasificacion.manual…
+}
+
+// Append-only. Particionar por mes cuando crezca.
+// Los de dominio se conservan (auditoría); los de uso se agregan a
+// PerfilHabitos y se purgan a los 12 meses.
+model Evento {
+  id               BigInt      @id @default(autoincrement())
+  contribuyente_id String      @db.Uuid
+  usuario_id       String?     @db.Uuid   // null si lo emitió un worker
+  clase            ClaseEvento
+  tipo             String
+  entidad          String?
+  entidad_id       String?
+  // Sin PII. IDs de registros sí, nombres de clientes no.
+  metadatos        Json?
+  creado_en        DateTime    @default(now())
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@index([contribuyente_id, tipo, creado_en])
+  @@index([contribuyente_id, clase, creado_en])
+  @@map("evento")
+}
+
+// Agregado nocturno de los eventos de uso. Decide CUÁNDO y POR DÓNDE avisar.
+// Nunca decide QUÉ decir.
+model PerfilHabitos {
+  contribuyente_id      String   @id @db.Uuid
+
+  dia_tipico_clasificar Int?     // 1-31: el patrón real, p.ej. 16
+  hora_tipica           Int?     // 0-23
+  dias_activos          Json     @default("[]")   // [1,3,5] = lun/mié/vie
+  canal_efectivo        String?  // app | correo — cuál sí abre
+  minutos_por_clasificacion Int?                  // para estimar esfuerzo honestamente
+  latencia_media_dias   Float?                    // cuánto tarda en atender una sugerencia
+  tasa_aceptacion       Float?                    // sugerencias aceptadas / mostradas
+  errores_frecuentes    Json     @default("[]")   // ['activo_fijo','gasto_no_deducible']
+  observacion_activada  Boolean  @default(true)   // el usuario puede apagarlo
+  actualizado_en        DateTime @updatedAt
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@map("perfil_habitos")
+}
+
+// ── Capa 2 · Observaciones ───────────────────────────────────────────────────
+
+enum SeveridadObservacion {
+  neg
+  warn
+  ia
+  pos
+  act
+}
+
+// Todo lo que la IA "sabe". Determinista, con evidencia. Nunca prosa.
+model Observacion {
+  id               String               @id @default(uuid()) @db.Uuid
+  contribuyente_id String               @db.Uuid
+  tipo             String               // cfdi_cancelado_contabilizado, monto_atipico…
+  familia          String               // fiscal | anomalia | oportunidad | habito | plazo
+  severidad        SeveridadObservacion
+  confianza        Float                // 1.0 = regla dura; <1 = estadística
+  periodo          String?              // '2026-08'
+  impacto_centavos BigInt?              // permite ordenar por dinero, no por severidad
+
+  // IDs de los registros que la sustentan. Es lo que hace citable la respuesta.
+  evidencia        Json                 // { cfdi_ids: [], poliza_ids: [], movimiento_ids: [] }
+  // Diccionario cerrado de cifras que el narrador puede usar. Nada fuera de aquí.
+  valores          Json
+
+  detectada_en     DateTime             @default(now())
+  resuelta_en      DateTime?
+  detector_version String               // para poder re-detectar tras un cambio de regla
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+  sugerencias   SugerenciaObservacion[]
+
+  // Una observación viva por tipo+periodo+evidencia: evita duplicar en cada barrido
+  @@unique([contribuyente_id, tipo, periodo, detector_version])
+  @@index([contribuyente_id, resuelta_en, impacto_centavos])
+  @@map("observacion")
+}
+
+// ── Capa 3 · Sugerencias ─────────────────────────────────────────────────────
+
+enum EstadoSugerencia {
+  pendiente
+  aceptada
+  descartada
+  pospuesta
+  caducada
+}
+
+model Sugerencia {
+  id               String           @id @default(uuid()) @db.Uuid
+  contribuyente_id String           @db.Uuid
+
+  // Estructura de §6.3 del README: Problema / Impacto / Acción
+  titulo           String
+  problema         String
+  impacto          String
+  impacto_centavos BigInt?
+
+  // La acción viene del registro cerrado de packages/ia/acciones.
+  // Sin acción tipada, la sugerencia no se muestra.
+  accion_tipo      String
+  accion_payload   Json
+  requiere_confirmacion Boolean     @default(true)
+
+  estado           EstadoSugerencia @default(pendiente)
+  prioridad        Int              @default(0)
+  mostrada_en      DateTime?
+  resuelta_en      DateTime?
+  motivo_descarte  String?
+  posponer_hasta   DateTime?
+  caduca_en        DateTime?
+
+  narracion        String?          // prosa del narrador, ya validada
+  narracion_origen String?          // 'modelo' | 'plantilla' (cayó al fallback)
+
+  contribuyente Contribuyente           @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+  observaciones SugerenciaObservacion[]
+  ejecuciones   AccionEjecutada[]
+
+  @@index([contribuyente_id, estado, prioridad])
+  @@map("sugerencia")
+}
+
+model SugerenciaObservacion {
+  sugerencia_id  String @db.Uuid
+  observacion_id String @db.Uuid
+
+  sugerencia  Sugerencia  @relation(fields: [sugerencia_id], references: [id], onDelete: Cascade)
+  observacion Observacion @relation(fields: [observacion_id], references: [id], onDelete: Cascade)
+
+  @@id([sugerencia_id, observacion_id])
+  @@map("sugerencia_observacion")
+}
+
+// Dos descartes del mismo tipo apagan ese tipo para este contribuyente.
+model TipoSilenciado {
+  contribuyente_id String   @db.Uuid
+  tipo             String
+  motivo           String?
+  silenciado_en    DateTime @default(now())
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@id([contribuyente_id, tipo])
+  @@map("tipo_silenciado")
+}
+
+// Toda acción de IA ejecutada, con su reverso. Se refleja también en Bitacora.
+model AccionEjecutada {
+  id               String    @id @default(uuid()) @db.Uuid
+  contribuyente_id String    @db.Uuid
+  sugerencia_id    String?   @db.Uuid
+  tipo             String
+  payload          Json
+  ejecutada_por    String?   @db.Uuid   // null = automática (nivel sin confirmación)
+  ejecutada_en     DateTime  @default(now())
+  reversible       Boolean   @default(true)
+  revertida_en     DateTime?
+  resultado        Json?
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+  sugerencia    Sugerencia?   @relation(fields: [sugerencia_id], references: [id])
+
+  @@index([contribuyente_id, ejecutada_en])
+  @@map("accion_ejecutada")
+}
+
+// ── La ruta guiada a la declaración ──────────────────────────────────────────
+
+enum EstadoPaso {
+  bloqueado
+  pendiente
+  en_progreso
+  listo
+  omitido
+}
+
+model Cierre {
+  id               String   @id @default(uuid()) @db.Uuid
+  contribuyente_id String   @db.Uuid
+  periodo          String   // '2026-08' | '2026'
+  tipo             String   // mensual | anual
+  iniciado_en      DateTime @default(now())
+  completado_en    DateTime?
+  fecha_limite     DateTime
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+  pasos         PasoCierre[]
+
+  @@unique([contribuyente_id, periodo, tipo])
+  @@map("cierre")
+}
+
+// Los 9 pasos de §3.6 del README, como entidad y no como lista visual.
+model PasoCierre {
+  id           String     @id @default(uuid()) @db.Uuid
+  cierre_id    String     @db.Uuid
+  clave        String     // cfdi_sincronizados | gastos_clasificados | bancos_conciliados…
+  orden        Int
+  estado       EstadoPaso @default(bloqueado)
+
+  // Por qué no puede avanzar: IDs de Observacion. El bloqueador ES la explicación.
+  bloqueadores Json       @default("[]")
+  // La acción tipada que lo resuelve
+  accion_tipo  String?
+  accion_payload Json?
+
+  pendientes   Int?       // 12 gastos por clasificar
+  valor_centavos BigInt?  // $3,180 de IVA esperando en esos 12
+  minutos_estimados Int?  // del PerfilHabitos, no una constante
+  explicacion  String?    // para qué sirve este paso, con SUS números
+  completado_en DateTime?
+  omitido_motivo String?
+
+  cierre Cierre @relation(fields: [cierre_id], references: [id], onDelete: Cascade)
+
+  @@unique([cierre_id, clave])
+  @@map("paso_cierre")
+}
+
+// ── Capa pedagógica ──────────────────────────────────────────────────────────
+
+// Grafo curado, ~60 conceptos. El nivel 3 (fundamento legal) lo escriben
+// humanos en packages/ia/pedagogia/conceptos y se siembra desde ahí.
+model Concepto {
+  clave           String   @id      // iva_acreditable, flujo_de_efectivo, activo_fijo…
+  nombre          String
+  nivel1_que_es   String            // una frase
+  nivel3_por_que  String?           // fundamento legal, con referencia. NO generado.
+  referencia      String?           // 'LIVA art. 5'
+  prerrequisitos  Json     @default("[]")
+  regimenes       Json     @default("[]")   // en qué régimen aplica
+
+  @@map("concepto")
+}
+
+// Nivel 2 (la aritmética con los números del usuario): generado y cacheado.
+// Se invalida cuando cambian las cifras del periodo.
+model ExplicacionCache {
+  id               String   @id @default(uuid()) @db.Uuid
+  contribuyente_id String   @db.Uuid
+  concepto_clave   String
+  periodo          String
+  texto            String
+  valores_hash     String            // invalida el caché si las cifras cambiaron
+  fuentes          String            // §6.1: obligatorio
+  generado_en      DateTime @default(now())
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@unique([contribuyente_id, concepto_clave, periodo])
+  @@map("explicacion_cache")
+}

@@ -1,0 +1,106 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Cifra — prefacturas
+//
+// REEMPLAZA a SelloDigital, SerieFolio y EmisionCFDI de comandos.prisma.
+// Cifra no timbra: prepara, valida y entrega. Ver ARQUITECTURA-PREFACTURAS.md.
+//
+// contribuyente_id no nulo, bajo RLS con rls.sql.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EstadoPrefactura {
+  borrador     // en edición o con errores de validación pendientes
+  lista        // validada, sin errores: se puede entregar
+  entregada    // el usuario se la llevó; corre el reloj de la conciliación
+  timbrada     // conciliada con un CFDI real que llegó del SAT
+  descartada
+}
+
+model Prefactura {
+  id               String           @id @default(uuid()) @db.Uuid
+  contribuyente_id String           @db.Uuid
+  plan_id          String?          @db.Uuid   // el comando de IA que la originó
+  plantilla_id     String?          @db.Uuid
+  origen_cfdi_id   String?          @db.Uuid   // "idéntica a la del mes pasado"
+
+  receptor_rfc     String
+  // Snapshot de los datos del receptor validados contra su constancia.
+  // CFDI 4.0 exige coincidencia exacta de nombre, código postal y régimen fiscal.
+  receptor_datos   Json
+  receptor_validado_en DateTime?
+
+  metodo_pago      String           // PUE | PPD
+  forma_pago       String           // PPD ⇒ '99' Por definir
+  uso_cfdi         String
+  conceptos        Json
+  subtotal_centavos BigInt
+  impuestos        Json             // trasladados y retenidos, por concepto
+  total_centavos   BigInt
+
+  // Resultado de la validación de §3. Cada error con su explicación en español
+  // y el arreglo, no el código del SAT.
+  validacion       Json             @default("[]")
+  catalogos_version String?
+
+  estado           EstadoPrefactura @default(borrador)
+  creado_en        DateTime         @default(now())
+  entregada_en     DateTime?
+  entregada_formato String?         // ficha | xml_sin_sellar | csv | json
+  descartada_motivo String?
+
+  // Cierre del ciclo
+  cfdi_id          String?          @db.Uuid   // el CFDI real, cuando se concilia
+  conciliada_en    DateTime?
+  conciliada_por   String?          @db.Uuid   // null = automática por score alto
+  score_conciliacion Float?
+  // Si el usuario cambió algo al timbrar, la diferencia se muestra; nunca se
+  // acepta en silencio.
+  diferencias      Json             @default("[]")
+
+  contribuyente Contribuyente     @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+  plantilla     PlantillaFactura? @relation(fields: [plantilla_id], references: [id])
+
+  @@index([contribuyente_id, estado, creado_en])
+  @@index([contribuyente_id, receptor_rfc, total_centavos])   // para el matcher
+  @@map("prefactura")
+}
+
+model PlantillaFactura {
+  id               String   @id @default(uuid()) @db.Uuid
+  contribuyente_id String   @db.Uuid
+  nombre           String
+  receptor_rfc     String
+  metodo_pago      String
+  forma_pago       String
+  uso_cfdi         String
+  conceptos        Json
+
+  // Recurrencia detectada o definida: dispara la sugerencia proactiva
+  recurrencia      String?  // mensual | quincenal | null
+  dia_del_mes      Int?
+  ultima_usada_en  DateTime?
+  activa           Boolean  @default(true)
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+  prefacturas   Prefactura[]
+
+  @@index([contribuyente_id, activa])
+  @@map("plantilla_factura")
+}
+
+// Catálogos del SAT, versionados por vigencia — misma regla que las tarifas de
+// ISR: datos, nunca constantes en código. Se siembran desde
+// packages/cfdi/catalogos/. Globales: NO llevan contribuyente_id ni RLS.
+model CatalogoSAT {
+  id             String    @id @default(uuid()) @db.Uuid
+  catalogo       String    // uso_cfdi | forma_pago | metodo_pago | prod_serv | unidad | regimen
+  clave          String
+  descripcion    String
+  // Reglas de compatibilidad, p.ej. qué usos aplican a qué régimen del receptor
+  restricciones  Json      @default("{}")
+  vigente_desde  DateTime
+  vigente_hasta  DateTime?
+
+  @@unique([catalogo, clave, vigente_desde])
+  @@index([catalogo, vigente_hasta])
+  @@map("catalogo_sat")
+}

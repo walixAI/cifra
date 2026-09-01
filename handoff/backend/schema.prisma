@@ -1,0 +1,485 @@
+// Cifra — esquema de referencia (Prisma)
+//
+// Punto de partida, no verdad revelada. Revísalo contra la sección 1 del README antes de
+// generar la primera migración.
+//
+// Convenciones:
+//   · Dinero en CENTAVOS enteros (BigInt). Nunca Float. Se formatea en la orilla.
+//   · Nombres del dominio en español: son los del SAT y no se traducen.
+//   · CIEC y e.firma van en tabla aparte, cifradas con sobre. Ver §4 de ARQUITECTURA.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── contribuyente ─────────────────────────
+
+enum TipoPersona {
+  fisica
+  moral
+}
+
+model Contribuyente {
+  id             String      @id @default(cuid())
+  rfc            String      @unique
+  nombre         String
+  nombreCompleto String
+  tipoPersona    TipoPersona
+  plan           String      @default("negocio")
+  creadoEn       DateTime    @default(now())
+
+  credencial     Credencial?
+  constancias    Constancia[]
+  obligaciones   Obligacion[]
+  cfdis          Cfdi[]
+  cuentasBanco   CuentaBancaria[]
+  cuentas        CuentaContable[]
+  polizas        Poliza[]
+  declaraciones  Declaracion[]
+  accesos        Acceso[]
+  notificaciones Notificacion[]
+  conversaciones ConversacionIA[]
+  sincronizaciones SincronizacionSat[]
+}
+
+/// Material criptográfico del usuario. Acceso restringido: nunca en un `SELECT *`,
+/// nunca fuera de apps/trabajos, nunca en logs ni en Sentry.
+model Credencial {
+  id              String   @id @default(cuid())
+  contribuyenteId String   @unique
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+
+  /// CIEC cifrada con sobre: {llaveDatosEnvuelta, nonce, cifrado}
+  ciecCifrada     Bytes?
+  ciecLlaveId     String?
+  ciecGuardadaEn  DateTime?
+
+  /// e.firma: .cer y .key, mismo esquema de cifrado
+  cerCifrado      Bytes?
+  keyCifrada      Bytes?
+  efirmaLlaveId   String?
+  efirmaGuardadaEn DateTime?
+  efirmaVenceEn   DateTime?
+
+  usos            UsoCredencial[]
+}
+
+/// Auditoría: cada descifrado deja rastro.
+model UsoCredencial {
+  id           String     @id @default(cuid())
+  credencialId String
+  credencial   Credencial @relation(fields: [credencialId], references: [id], onDelete: Cascade)
+  tipo         String     // "ciec" | "efirma"
+  operacion    String     // "descarga_cfdi" | "leer_constancia" | "presentar_declaracion"
+  trabajoId    String?
+  creadoEn     DateTime   @default(now())
+
+  @@index([credencialId, creadoEn])
+}
+
+model Constancia {
+  id              String   @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  leidaEn         DateTime
+  regimenes       String[]
+  domicilio       Json?
+  archivoUrl      String?
+
+  @@index([contribuyenteId, leidaEn])
+}
+
+enum Periodicidad {
+  mensual
+  bimestral
+  anual
+}
+
+model Obligacion {
+  id              String       @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  clave           String
+  descripcion     String
+  periodicidad    Periodicidad
+  /// Día del mes siguiente; null = último día del mes siguiente
+  diaLimite       Int?
+  vigenteDesde    DateTime
+  vigenteHasta    DateTime?
+}
+
+// ───────────────────────── CFDI ─────────────────────────
+
+enum TipoCfdi {
+  ingreso
+  egreso
+  nomina
+  pago
+  traslado
+}
+
+enum DireccionCfdi {
+  emitido
+  recibido
+}
+
+enum EstadoSat {
+  vigente
+  cancelado
+}
+
+enum EstadoInterno {
+  sin_clasificar
+  clasificado
+  revisar_deduccion
+}
+
+model Cfdi {
+  id              String        @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+
+  uuid            String        @unique
+  tipo            TipoCfdi
+  direccion       DireccionCfdi
+
+  emisorRfc       String
+  emisorNombre    String
+  receptorRfc     String
+  receptorNombre  String
+
+  fechaEmision    DateTime
+  fechaTimbrado   DateTime
+
+  subtotal        BigInt
+  descuento       BigInt        @default(0)
+  total           BigInt
+
+  /// [{impuesto:"IVA"|"ISR"|"IEPS", tasa:0.16, importe:248300, tipo:"trasladado"|"retenido"}]
+  impuestos       Json
+
+  usoCfdi         String?
+  metodoPago      String?       // PUE | PPD
+  formaPago       String?
+  conceptos       Json
+
+  estadoSat       EstadoSat     @default(vigente)
+  canceladoEn     DateTime?
+  motivoCancelacion String?
+
+  estadoInterno   EstadoInterno @default(sin_clasificar)
+
+  cuentaContableId String?
+  cuentaContable   CuentaContable? @relation(fields: [cuentaContableId], references: [id])
+  /// La IA sugiere, el usuario confirma. Mientras esté en true, la UI la marca como sugerencia.
+  cuentaSugeridaPorIa Boolean    @default(false)
+  confianzaSugerencia Float?
+
+  /// Clave para el IVA por flujo de efectivo: hasta que se cobra o se paga, su IVA no cuenta.
+  liquidado       Boolean       @default(false)
+  fechaLiquidacion DateTime?
+
+  xmlUrl          String?
+  pdfUrl          String?
+
+  asientos        Asiento[]
+  polizas         Poliza[]      @relation("PolizaOrigenCfdi")
+  movimientos     MovimientoBancario[]
+
+  @@index([contribuyenteId, fechaEmision])
+  @@index([contribuyenteId, estadoSat])
+  @@index([contribuyenteId, estadoInterno])
+  @@index([contribuyenteId, tipo, direccion])
+}
+
+// ───────────────────────── bancos ─────────────────────────
+
+enum OrigenCuenta {
+  agregacion
+  estado_de_cuenta
+  manual
+}
+
+enum EstadoCuenta {
+  conectada
+  requiere_reautorizacion
+  error
+}
+
+model CuentaBancaria {
+  id              String       @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  institucion     String
+  mascara         String?
+  tipo            String       // cuenta_empresarial | tarjeta_negocio | efectivo
+  origen          OrigenCuenta
+  estado          EstadoCuenta @default(conectada)
+  saldo           BigInt       @default(0)
+  ultimoSync      DateTime?
+
+  movimientos     MovimientoBancario[]
+}
+
+model MovimientoBancario {
+  id               String   @id @default(cuid())
+  cuentaBancariaId String
+  cuentaBancaria   CuentaBancaria @relation(fields: [cuentaBancariaId], references: [id], onDelete: Cascade)
+
+  fecha            DateTime
+  descripcionBanco String
+  /// Firmado: negativo es cargo
+  monto            BigInt
+  saldo            BigInt?
+
+  conciliado       Boolean  @default(false)
+  cfdiId           String?
+  cfdi             Cfdi?    @relation(fields: [cfdiId], references: [id])
+  polizaId         String?
+  poliza           Poliza?  @relation(fields: [polizaId], references: [id])
+
+  /// {cfdiId, score, motivo} — propuesta de la IA, pendiente de confirmar
+  sugerencia       Json?
+
+  @@index([cuentaBancariaId, fecha])
+  @@index([conciliado])
+}
+
+// ───────────────────────── contabilidad ─────────────────────────
+
+enum Naturaleza {
+  deudora
+  acreedora
+}
+
+model CuentaContable {
+  id              String     @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  codigo          String
+  nombre          String
+  naturaleza      Naturaleza
+  nivel           Int        @default(1)
+  padreId         String?
+  padre           CuentaContable?  @relation("Jerarquia", fields: [padreId], references: [id])
+  hijas           CuentaContable[] @relation("Jerarquia")
+  codigoAgrupadorSat String?
+
+  asientos        Asiento[]
+  cfdis           Cfdi[]
+
+  @@unique([contribuyenteId, codigo])
+}
+
+enum TipoPoliza {
+  diario
+  ingresos
+  egresos
+}
+
+enum OrigenPoliza {
+  cfdi
+  banco
+  manual
+}
+
+model Poliza {
+  id              String       @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+
+  folio           String
+  tipo            TipoPoliza
+  fecha           DateTime
+  concepto        String
+
+  origenTipo      OrigenPoliza
+  origenCfdiId    String?
+  origenCfdi      Cfdi?        @relation("PolizaOrigenCfdi", fields: [origenCfdiId], references: [id])
+  /// Prosa para el usuario: de dónde salió esta póliza
+  origenTexto     String?
+
+  generadaPor     String       @default("cifra") // cifra | usuario
+  /// Se llena, por ejemplo, cuando el CFDI de origen se canceló en el SAT (§3.4 del README)
+  alerta          String?
+  revertidaPorId  String?      @unique
+  revertidaPor    Poliza?      @relation("Reversa", fields: [revertidaPorId], references: [id])
+  reversaDe       Poliza?      @relation("Reversa")
+
+  asientos        Asiento[]
+  movimientos     MovimientoBancario[]
+
+  @@unique([contribuyenteId, folio])
+  @@index([contribuyenteId, fecha])
+}
+
+/// Invariante que hay que hacer valer en la aplicación:
+/// SUM(debe) = SUM(haber) por póliza. Se rechaza al guardar.
+model Asiento {
+  id               String   @id @default(cuid())
+  polizaId         String
+  poliza           Poliza   @relation(fields: [polizaId], references: [id], onDelete: Cascade)
+  cuentaContableId String
+  cuentaContable   CuentaContable @relation(fields: [cuentaContableId], references: [id])
+  debe             BigInt   @default(0)
+  haber            BigInt   @default(0)
+  orden            Int      @default(0)
+  cfdiId           String?
+  cfdi             Cfdi?    @relation(fields: [cfdiId], references: [id])
+
+  @@index([polizaId])
+}
+
+// ───────────────────────── impuestos ─────────────────────────
+
+enum TipoDeclaracion {
+  iva_definitivo
+  isr_provisional
+  diot
+  anual
+}
+
+enum EstadoDeclaracion {
+  estimada
+  preparada
+  presentada
+  pagada
+}
+
+model Declaracion {
+  id              String            @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente     @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+
+  /// "2026-08"
+  periodo         String
+  tipo            TipoDeclaracion
+  estado          EstadoDeclaracion @default(estimada)
+
+  /// El desglose completo, tal como lo muestra la pantalla de Impuestos.
+  /// Guardarlo permite explicar después por qué salió lo que salió.
+  calculo         Json
+
+  fechaLimite     DateTime
+  presentadaEn    DateTime?
+  acuseUrl        String?
+  lineaCaptura    String?
+
+  @@unique([contribuyenteId, periodo, tipo])
+}
+
+/// Tarifas del ISR por ejercicio. Cambian cada año y se indexan por inflación:
+/// datos versionados, nunca constantes en código.
+model TarifaIsr {
+  id        String @id @default(cuid())
+  ejercicio Int
+  /// [{limiteInferior, limiteSuperior, cuotaFija, porcentaje}]
+  tramos    Json
+  fuente    String?
+
+  @@unique([ejercicio])
+}
+
+// ───────────────────────── accesos, avisos, IA ─────────────────────────
+
+enum RolAcceso {
+  contador
+  captura
+  solo_lectura
+}
+
+enum EstadoAcceso {
+  invitado
+  activo
+  revocado
+}
+
+model Acceso {
+  id              String       @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  email           String
+  rol             RolAcceso
+  estado          EstadoAcceso @default(invitado)
+  token           String?      @unique
+  invitadoEn      DateTime     @default(now())
+  /// 7 días desde la invitación
+  expiraEn        DateTime
+  activadoEn      DateTime?
+
+  @@unique([contribuyenteId, email])
+}
+
+model Notificacion {
+  id              String   @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  tipo            String
+  /// neg | warn | ia | pos | act
+  severidad       String
+  texto           String
+  pantallaDestino String?
+  entidadTipo     String?
+  entidadId       String?
+  creadoEn        DateTime @default(now())
+  leidaEn         DateTime?
+
+  @@index([contribuyenteId, leidaEn, creadoEn])
+}
+
+model ConversacionIA {
+  id              String   @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  creadoEn        DateTime @default(now())
+  mensajes        MensajeIA[]
+}
+
+model MensajeIA {
+  id              String   @id @default(cuid())
+  conversacionId  String
+  conversacion    ConversacionIA @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  rol             String   // user | ai
+  texto           String
+  /// OBLIGATORIO en todo mensaje de la IA. Una respuesta sin origen es un defecto.
+  /// "246 CFDI · 182 movimientos bancarios · balanza cuadrada en $412,860"
+  fuentes         String?
+  /// IDs de los registros que sustentan la respuesta, para poder navegar al origen
+  referencias     Json?
+  creadoEn        DateTime @default(now())
+
+  @@index([conversacionId, creadoEn])
+}
+
+// ───────────────────────── sincronización ─────────────────────────
+
+enum EstadoSincronizacion {
+  corriendo
+  ok
+  error
+}
+
+/// Alimenta el contrato de datos rancios de §7 del README:
+/// {stale, corte, ultimoIntento, error, proximoIntentoEn}
+model SincronizacionSat {
+  id              String               @id @default(cuid())
+  contribuyenteId String
+  contribuyente   Contribuyente        @relation(fields: [contribuyenteId], references: [id], onDelete: Cascade)
+  tipo            String               // cfdi | validez | constancia
+  estado          EstadoSincronizacion
+  iniciadaEn      DateTime             @default(now())
+  terminadaEn     DateTime?
+  /// Corte de datos exitoso más reciente: lo que la UI muestra como antigüedad
+  corte           DateTime?
+  codigoError     String?
+  mensajeError    String?
+  cfdiNuevos      Int                  @default(0)
+  intentos        Int                  @default(1)
+
+  @@index([contribuyenteId, tipo, iniciadaEn])
+}

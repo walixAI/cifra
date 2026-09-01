@@ -1,0 +1,21 @@
+# dependencias
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+.next/
+.turbo/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# entorno — nunca CIEC, e.firma ni llaves reales
+.env
+.env.local
+.env.*.local
+
+# varios
+.DS_Store
+*.log
+coverage/

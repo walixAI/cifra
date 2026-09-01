@@ -1,0 +1,230 @@
+{
+  "_nota": "Datos semilla de Cifra. Las mismas cifras del prototipo, cruzadas entre módulos a propósito. Dinero en CENTAVOS enteros. Los invariantes de periodos son la suite de regresión del motor fiscal: ingresos − gastos = utilidad, iva + isr = total, y el trimestre es la suma exacta de sus tres meses.",
+
+  "contribuyente": {
+    "rfc": "TODA7606258I7",
+    "nombre": "José A. Torres",
+    "nombreCompleto": "José Antonio Torres Delgado",
+    "tipoPersona": "fisica",
+    "plan": "negocio"
+  },
+
+  "constancia": {
+    "leidaEn": "2026-08-29",
+    "regimenes": [
+      "Actividad empresarial y profesional",
+      "Sueldos y salarios"
+    ]
+  },
+
+  "obligaciones": [
+    { "clave": "iva_definitivo", "descripcion": "Pago definitivo mensual de IVA", "periodicidad": "mensual", "diaLimite": 17, "vigenteDesde": "2016-01-04" },
+    { "clave": "isr_provisional_empresarial", "descripcion": "ISR provisional · actividad empresarial", "periodicidad": "mensual", "diaLimite": 17, "vigenteDesde": "2024-09-18" },
+    { "clave": "isr_provisional_profesional", "descripcion": "ISR provisional · servicios profesionales", "periodicidad": "mensual", "diaLimite": 17, "vigenteDesde": "2016-01-04" },
+    { "clave": "diot", "descripcion": "Declaración de proveedores (DIOT)", "periodicidad": "mensual", "diaLimite": null, "vigenteDesde": "2016-01-04" },
+    { "clave": "anual_isr", "descripcion": "Declaración anual de ISR", "periodicidad": "anual", "diaLimite": null, "vigenteDesde": "2016-01-04" }
+  ],
+
+  "periodos": {
+    "mes": {
+      "etiqueta": "Agosto 2026", "vs": "vs julio",
+      "ingresos": 18542000, "gastos": 7428000, "utilidad": 11114000,
+      "iva": 842000, "isr": 1432000, "impuestos": 2274000,
+      "deltaIngresos": 12.4, "deltaGastos": -4.8, "margen": 59.9,
+      "porCobrar": 4820000, "cfdiProcesados": 238, "cfdiPorRevisar": 8,
+      "prosa": "Vas en buen camino. Facturaste 12.4% más que en julio y tus gastos bajaron 4.8%."
+    },
+    "trimestre": {
+      "etiqueta": "Junio–agosto 2026", "vs": "vs trimestre previo",
+      "ingresos": 51268000, "gastos": 22194000, "utilidad": 29074000,
+      "iva": 2429000, "isr": 4067000, "impuestos": 6496000,
+      "deltaIngresos": 8.1, "deltaGastos": 2.6, "margen": 56.7,
+      "porCobrar": 8924000, "cfdiProcesados": 694, "cfdiPorRevisar": 21,
+      "prosa": "Buen trimestre: facturaste 8.1% más que el anterior, aunque tus gastos subieron 2.6%."
+    },
+    "anio": {
+      "etiqueta": "Enero–agosto 2026", "vs": "vs 2025 a la fecha",
+      "ingresos": 128664000, "gastos": 47430000, "utilidad": 81234000,
+      "iva": 5784000, "isr": 11336000, "impuestos": 17120000,
+      "deltaIngresos": 15.2, "deltaGastos": 6.9, "margen": 63.1,
+      "porCobrar": 13250000, "cfdiProcesados": 2604, "cfdiPorRevisar": 38,
+      "prosa": "Tu mejor año hasta ahora: 15.2% más facturado que en 2025, con gastos 6.9% arriba."
+    },
+    "personalizado": {
+      "etiqueta": "1 abr – 31 ago 2026", "vs": "vs mismo lapso de 2025",
+      "ingresos": 84291000, "gastos": 32918000, "utilidad": 51373000,
+      "iva": 3765000, "isr": 7077000, "impuestos": 10842000,
+      "deltaIngresos": 11.0, "deltaGastos": 5.2, "margen": 60.9,
+      "porCobrar": 9760000, "cfdiProcesados": 1638, "cfdiPorRevisar": 26,
+      "prosa": "En estos cinco meses facturaste 11.0% más que en 2025 y gastaste 5.2% más."
+    }
+  },
+
+  "historicoImpuestos": [
+    { "periodo": "2026-05", "iva": 714000, "isr": 1188000, "total": 1902000, "estado": "presentada", "deltaVsPrevio": null },
+    { "periodo": "2026-06", "iva": 801000, "isr": 1294000, "total": 2095000, "estado": "presentada", "deltaVsPrevio": 10.1 },
+    { "periodo": "2026-07", "iva": 786000, "isr": 1341000, "total": 2127000, "estado": "presentada", "deltaVsPrevio": 1.5 },
+    { "periodo": "2026-08", "iva": 842000, "isr": 1432000, "total": 2274000, "estado": "estimada", "deltaVsPrevio": 6.9 }
+  ],
+
+  "calculoIvaAgosto": {
+    "trasladado": 2450000,
+    "acreditable": 1188500,
+    "retenidoPorClientes": 419500,
+    "porPagar": 842000,
+    "acreditableEnDuda": 30100,
+    "porPagarSiSeCorrige": 872100,
+    "_nota": "trasladado − acreditable − retenido = porPagar. Pero 30100 del acreditable vienen del CFDI cancelado 3B77…A20, aún vivo en la póliza D-0142. Ver §3.4 y §3.5 del README.",
+    "fechaLimite": "2026-09-17"
+  },
+
+  "calculoIsrAgosto": {
+    "ingresosAcumulados": 128664000,
+    "deduccionesAcumuladas": 47430000,
+    "baseEstimada": 81234000,
+    "pagosProvisionalesAnteriores": 11816000,
+    "isrDelPeriodo": 1432000,
+    "fechaLimite": "2026-09-17"
+  },
+
+  "retencionesAFavor": {
+    "isrPorPersonasMorales": 427500,
+    "ivaPorPersonasMorales": 419500,
+    "isrPorPatron": 386000,
+    "_nota": "Dos fuentes de ingreso; en abril se declaran juntas. La anual apunta a saldo a favor cercano a 900000."
+  },
+
+  "cuentasContables": [
+    { "codigo": "1120-01", "nombre": "Bancos BBVA", "naturaleza": "deudora" },
+    { "codigo": "1130-02", "nombre": "Clientes", "naturaleza": "deudora" },
+    { "codigo": "1180-01", "nombre": "IVA acreditable", "naturaleza": "deudora" },
+    { "codigo": "1250-01", "nombre": "Equipo de cómputo", "naturaleza": "deudora" },
+    { "codigo": "2110-01", "nombre": "Proveedores", "naturaleza": "acreedora" },
+    { "codigo": "2140-01", "nombre": "IVA trasladado", "naturaleza": "acreedora" },
+    { "codigo": "4100-01", "nombre": "Ingresos por servicios", "naturaleza": "acreedora" },
+    { "codigo": "6100-01", "nombre": "Renta", "naturaleza": "deudora" },
+    { "codigo": "6100-03", "nombre": "Combustible", "naturaleza": "deudora" },
+    { "codigo": "6100-04", "nombre": "Telefonía e internet", "naturaleza": "deudora" },
+    { "codigo": "6100-05", "nombre": "Software", "naturaleza": "deudora" },
+    { "codigo": "6100-06", "nombre": "Honorarios", "naturaleza": "deudora" },
+    { "codigo": "6100-07", "nombre": "Publicidad", "naturaleza": "deudora" },
+    { "codigo": "6100-09", "nombre": "Papelería", "naturaleza": "deudora" }
+  ],
+
+  "cuentasBancarias": [
+    { "institucion": "BBVA", "mascara": "4471", "tipo": "cuenta_empresarial", "origen": "agregacion", "estado": "conectada", "ultimoSync": "2026-08-30T09:15:00-06:00" },
+    { "institucion": "Banorte", "mascara": "8802", "tipo": "tarjeta_negocio", "origen": "agregacion", "estado": "conectada", "ultimoSync": "2026-08-30T09:15:00-06:00" },
+    { "institucion": "Efectivo", "mascara": null, "tipo": "efectivo", "origen": "manual", "estado": "conectada", "ultimoSync": null }
+  ],
+
+  "cfdisRecibidos": [
+    { "uuid": "C0A4…19D", "emisorRfc": "IES990412QA7", "emisorNombre": "Inmuebles Escobedo 193", "fechaEmision": "2026-08-28", "usoCfdi": "G03", "metodoPago": "PPD", "concepto": "Renta de oficina · agosto 2026", "subtotal": 1551700, "iva": 248300, "total": 1800000, "cuentaContable": "6100-01", "poliza": "D-0147", "estadoSat": "vigente", "estadoInterno": "clasificado", "liquidado": true, "fechaLiquidacion": "2026-08-28", "movimiento": "Traspaso BBVA ·4471, 28 ago" },
+    { "uuid": "D71E…5B4", "emisorRfc": "PME180614RC3", "emisorNombre": "Publicidad Meridiano", "fechaEmision": "2026-08-26", "usoCfdi": "G03", "metodoPago": "PUE", "concepto": "Campaña digital · agosto 2026", "subtotal": 700000, "iva": 112000, "total": 812000, "cuentaContable": "6100-07", "cuentaSugeridaPorIa": true, "poliza": "D-0146", "estadoSat": "vigente", "estadoInterno": "sin_clasificar", "liquidado": false, "fechaLiquidacion": "2026-09-02", "movimiento": "SPEI programado, 2 sep" },
+    { "uuid": "44A2…C09", "emisorRfc": "NCS210311JD9", "emisorNombre": "Nube Cortés Servicios Digitales", "fechaEmision": "2026-08-24", "usoCfdi": "G03", "metodoPago": "PUE", "concepto": "Licencias de software · agosto 2026", "subtotal": 253400, "iva": 40600, "total": 294000, "cuentaContable": "6100-05", "cuentaSugeridaPorIa": true, "poliza": null, "estadoSat": "vigente", "estadoInterno": "sin_clasificar", "liquidado": true, "fechaLiquidacion": "2026-08-27", "movimiento": "Cargo Banorte ·8802, 27 ago (sugerido)" },
+    { "uuid": "8F2A…C41", "emisorRfc": "TME840315KT6", "emisorNombre": "Teléfonos de México", "fechaEmision": "2026-08-22", "usoCfdi": "G03", "metodoPago": "PUE", "concepto": "Servicio de telefonía e internet · agosto", "subtotal": 91600, "iva": 14600, "total": 106200, "cuentaContable": "6100-04", "poliza": "D-0139", "estadoSat": "vigente", "estadoInterno": "clasificado", "liquidado": true, "fechaLiquidacion": "2026-08-22", "movimiento": "Cargo automático BBVA ·4471, 22 ago" },
+    { "uuid": "3B77…A20", "emisorRfc": "SAI160228MB4", "emisorNombre": "Suministros Anáhuac I", "fechaEmision": "2026-08-19", "usoCfdi": "G01", "metodoPago": "PUE", "concepto": "Papelería y consumibles", "subtotal": 187900, "iva": 30100, "total": 218000, "cuentaContable": "6100-09", "poliza": "D-0142", "estadoSat": "cancelado", "canceladoEn": "2026-08-21", "estadoInterno": "clasificado", "liquidado": true, "fechaLiquidacion": "2026-08-19", "movimiento": "Cargo BBVA ·4471, 19 ago", "_nota": "★ El caso de §3.4: cancelado DESPUÉS de contabilizarse. Su IVA de 30100 sigue acreditando." },
+    { "uuid": "5E31…B88", "emisorRfc": "CVA070919LN2", "emisorNombre": "Combustibles del Valle", "fechaEmision": "2026-08-16", "usoCfdi": "G03", "metodoPago": "PUE", "concepto": "Combustible · 4 cargas", "subtotal": 355200, "iva": 56800, "total": 412000, "cuentaContable": "6100-03", "poliza": "D-0136", "estadoSat": "vigente", "estadoInterno": "clasificado", "liquidado": true, "fechaLiquidacion": "2026-08-16", "movimiento": "Cargo Banorte ·8802, 16 ago" },
+    { "uuid": "A8D6…70C", "emisorRfc": "DAA030710FF8", "emisorNombre": "Despacho Aguilar y Asociados", "fechaEmision": "2026-08-14", "usoCfdi": "G03", "metodoPago": "PUE", "concepto": "Honorarios contables · agosto 2026", "subtotal": 732800, "iva": 117200, "total": 850000, "cuentaContable": "6100-06", "poliza": "D-0134", "estadoSat": "vigente", "estadoInterno": "clasificado", "liquidado": true, "fechaLiquidacion": "2026-08-14", "movimiento": "Traspaso BBVA ·4471, 14 ago" },
+    { "uuid": "6C90…D45", "emisorRfc": "CRE120405TG1", "emisorNombre": "Cómputo Reforma 21", "fechaEmision": "2026-08-11", "usoCfdi": "I04", "metodoPago": "PUE", "concepto": "Equipo de cómputo · 1 laptop", "subtotal": 681000, "iva": 109000, "total": 790000, "cuentaContable": "1250-01", "poliza": "D-0131", "estadoSat": "vigente", "estadoInterno": "revisar_deduccion", "liquidado": true, "fechaLiquidacion": "2026-08-11", "movimiento": "Cargo BBVA ·4471, 11 ago", "_nota": "Activo fijo: se capitaliza y deprecia a 3 años, no se deduce de golpe." }
+  ],
+
+  "cfdisEmitidos": [
+    { "folio": "A-1042", "receptorNombre": "Grupo Médico Anáhuac", "fechaEmision": "2026-08-28", "subtotal": 3629300, "iva": 580700, "total": 4210000, "poliza": "D-0148", "liquidado": false, "_nota": "Timbrada 12:14" },
+    { "folio": "A-1041", "receptorNombre": "Grupo Médico Anáhuac", "fechaEmision": "2026-07-25", "subtotal": 5034500, "iva": 805500, "total": 5840000, "liquidado": false, "diasVencida": 34, "_nota": "★ La factura más grande y más vencida. Su IVA ya cuenta como trasladado." },
+    { "folio": "A-1040", "receptorNombre": "Tecnologías Ruvalcaba", "fechaEmision": "2026-08-04", "total": 3180000, "poliza": "E-0091", "liquidado": true, "fechaLiquidacion": "2026-08-26", "diasCobranza": 22 }
+  ],
+
+  "polizas": [
+    { "folio": "D-0148", "tipo": "diario", "fecha": "2026-08-28", "concepto": "Factura A-1042 · Grupo Médico Anáhuac", "origenTipo": "cfdi", "origenTexto": "CFDI emitido A-1042 del 28 de agosto, timbrado a las 12:14. El IVA trasladado se acumula al pago definitivo de agosto.", "asientos": [ { "cuenta": "1130-02", "debe": 4210000, "haber": 0 }, { "cuenta": "4100-01", "debe": 0, "haber": 3629300 }, { "cuenta": "2140-01", "debe": 0, "haber": 580700 } ] },
+    { "folio": "D-0147", "tipo": "diario", "fecha": "2026-08-28", "concepto": "Renta de oficina · Inmuebles Escobedo 193", "origenTipo": "cfdi", "origenCfdi": "C0A4…19D", "origenTexto": "CFDI C0A4…19D del 28 de agosto, conciliado con el traspaso de BBVA ·4471 del mismo día.", "asientos": [ { "cuenta": "6100-01", "debe": 1551700, "haber": 0 }, { "cuenta": "1180-01", "debe": 248300, "haber": 0 }, { "cuenta": "1120-01", "debe": 0, "haber": 1800000 } ] },
+    { "folio": "E-0091", "tipo": "egresos", "fecha": "2026-08-26", "concepto": "Cobro factura A-1040 · Tecnologías Ruvalcaba", "origenTipo": "banco", "origenTexto": "SPEI recibido el 26 de agosto, ligado a la factura A-1040 emitida el 4 de agosto. Cobranza en 22 días.", "asientos": [ { "cuenta": "1120-01", "debe": 3180000, "haber": 0 }, { "cuenta": "1130-02", "debe": 0, "haber": 3180000 } ] },
+    { "folio": "D-0146", "tipo": "diario", "fecha": "2026-08-24", "concepto": "Publicidad digital · Publicidad Meridiano", "origenTipo": "cfdi", "origenCfdi": "D71E…5B4", "origenTexto": "CFDI D71E…5B4 del 26 de agosto. La cuenta 6100-07 la propuso la IA y falta que la confirmes.", "asientos": [ { "cuenta": "6100-07", "debe": 700000, "haber": 0 }, { "cuenta": "1180-01", "debe": 112000, "haber": 0 }, { "cuenta": "2110-01", "debe": 0, "haber": 812000 } ] },
+    { "folio": "D-0142", "tipo": "diario", "fecha": "2026-08-19", "concepto": "Papelería · Suministros Anáhuac I", "origenTipo": "cfdi", "origenCfdi": "3B77…A20", "origenTexto": "CFDI 3B77…A20 del 19 de agosto, cancelado por el emisor el 21 de agosto.", "alerta": "El CFDI que originó esta póliza está cancelado en el SAT y su IVA de $301 sigue sumando a tu acreditable. Hay que cancelar el registro antes del cierre de agosto.", "asientos": [ { "cuenta": "6100-09", "debe": 187900, "haber": 0 }, { "cuenta": "1180-01", "debe": 30100, "haber": 0 }, { "cuenta": "1120-01", "debe": 0, "haber": 218000 } ] }
+  ],
+
+  "movimientosPorConciliar": [
+    { "descripcionBanco": "SERVICIOS EN LINEA MX", "monto": -294000, "sugerencia": { "cfdi": "44A2…C09", "emisor": "Nube Cortés" } },
+    { "descripcionBanco": "CARGO / COMBUSTIBLES VALLE", "monto": -412000, "sugerencia": { "cfdi": "5E31…B88", "emisor": "Combustibles del Valle" } },
+    { "descripcionBanco": "TRASPASO / DESPACHO AGUILAR", "monto": -850000, "sugerencia": { "cfdi": "A8D6…70C", "emisor": "Despacho Aguilar y Asociados" } },
+    { "descripcionBanco": "SPEI / PUBLICIDAD MERIDIANO", "monto": -812000, "sugerencia": { "cfdi": "D71E…5B4", "emisor": "Publicidad Meridiano" } },
+    { "descripcionBanco": "CARGO / TELMEX AGOSTO", "monto": -106200, "sugerencia": { "cfdi": "8F2A…C41", "emisor": "Teléfonos de México" } },
+    { "descripcionBanco": "DEPOSITO EFECTIVO", "fecha": "2026-08-14", "monto": 1420000, "sugerencia": null, "_nota": "Depósito sin factura emitida. Requiere atención del usuario." },
+    { "descripcionBanco": "RETIRO CAJERO", "monto": -600000, "sugerencia": null, "_nota": "Sin comprobante: gasto no deducible." },
+    { "descripcionBanco": "COMISION BANCARIA", "monto": -68000, "sugerencia": null }
+  ],
+
+  "totales": {
+    "cfdiDelPeriodo": 246,
+    "movimientosBancarios": 182,
+    "movimientosConciliados": 174,
+    "movimientosSinCfdi": 8,
+    "montoSinConciliar": 918000,
+    "polizas": 148,
+    "balanzaCuadradaEn": 41286000,
+    "gastosSinComprobante": 634000,
+    "ivaPerdidoPorFaltaDeCfdi": 101400,
+    "porCobrarAlCorriente": 2980000,
+    "porCobrarVencido": 1840000,
+    "cfdiHistoricosEnSat": 2842,
+    "proveedoresDiot": 34,
+    "diasCobranzaPromedio": 23
+  },
+
+  "saludFinanciera": {
+    "compuesto": 82,
+    "delta": 6,
+    "ejes": { "ingresos": 88, "cobranza": 71, "liquidez": 79, "gastos": 84, "impuestos": 90, "contabilidad": 80 }
+  },
+
+  "cierreMensual": {
+    "periodo": "2026-08",
+    "pasos": [
+      { "clave": "cfdi_sincronizados", "nombre": "CFDI sincronizados", "estado": "listo" },
+      { "clave": "xml_procesados", "nombre": "XML procesados", "estado": "listo" },
+      { "clave": "gastos_clasificados", "nombre": "Gastos clasificados", "estado": "pendiente", "detalle": "8 pendientes" },
+      { "clave": "bancos_conciliados", "nombre": "Bancos conciliados", "estado": "listo" },
+      { "clave": "cobrar_revisadas", "nombre": "Facturas por cobrar revisadas", "estado": "pendiente" },
+      { "clave": "polizas_generadas", "nombre": "Pólizas generadas", "estado": "listo" },
+      { "clave": "balanza_revisada", "nombre": "Balanza revisada", "estado": "listo" },
+      { "clave": "impuestos_estimados", "nombre": "Impuestos estimados", "estado": "listo" },
+      { "clave": "estados_generados", "nombre": "Estados financieros generados", "estado": "listo" }
+    ]
+  },
+
+  "notificaciones": [
+    { "severidad": "neg", "texto": "El CFDI de Suministros Anáhuac fue cancelado en el SAT y su póliza D-0142 sigue acreditando $301 de IVA.", "pantallaDestino": "contabilidad" },
+    { "severidad": "warn", "texto": "Faltan 18 días para presentar IVA e ISR de agosto: $22,740 estimados.", "pantallaDestino": "impuestos" },
+    { "severidad": "ia", "texto": "Clasifiqué 14 gastos nuevos. 8 necesitan que confirmes la cuenta.", "pantallaDestino": "gastos" },
+    { "severidad": "pos", "texto": "Se conciliaron 12 movimientos de BBVA automáticamente.", "pantallaDestino": "bancos" },
+    { "severidad": "warn", "texto": "La factura A-1041 de Grupo Médico Anáhuac lleva 34 días vencida ($58,400).", "pantallaDestino": "ingresos" }
+  ],
+
+  "recomendacionesIa": [
+    { "titulo": "Renegociar o recortar publicidad digital", "monto": 324000, "unidad": "mes", "problema": "El gasto creció 28% en tres meses y el ingreso asociado 9%.", "impacto": "Al ritmo actual será 26% de tus gastos en diciembre.", "accion": "Revisar el último CFDI antes de renovar en septiembre.", "urgente": false },
+    { "titulo": "Cobrar la factura A-1041 antes del 17 de septiembre", "monto": 5840000, "problema": "Lleva 34 días vencida y es tu factura más grande.", "impacto": "Su IVA ya se considera trasladado: pagarás impuesto por dinero que no entró.", "accion": "Enviar recordatorio de cobro.", "urgente": true },
+    { "titulo": "Facturar los $6,340 de gastos sin comprobante", "monto": 101400, "problema": "11 gastos pagados sin CFDI.", "impacto": "No son deducibles ni acreditan IVA.", "accion": "Pedir factura a 4 proveedores.", "urgente": true }
+  ],
+
+  "revisionesIa": [
+    { "tipo": "cfdi_duplicado", "severidad": "neg", "texto": "Dos comprobantes de Nube Cortés con el mismo importe y fecha." },
+    { "tipo": "importe_inusual", "severidad": "neg", "texto": "El CFDI de equipo de cómputo ($7,900) es 4.2 veces tu gasto típico en la categoría." },
+    { "tipo": "proveedor_nuevo", "severidad": "warn", "texto": "Publicidad Meridiano apareció hace 3 meses y ya es tu segundo gasto." },
+    { "tipo": "movimiento_sin_cfdi", "severidad": "warn", "texto": "8 movimientos bancarios sin CFDI correspondiente por $9,180." }
+  ],
+
+  "calendario": {
+    "2026-08": { "dias": 31, "marcas": { "17": "crit", "31": "soft" } },
+    "2026-09": { "dias": 30, "marcas": { "5": "warn", "12": "warn", "17": "crit", "30": "soft" } },
+    "2026-10": { "dias": 31, "marcas": { "17": "crit", "31": "soft" } },
+    "_leyenda": { "crit": "Declarar", "warn": "Preparar", "soft": "Cierre" }
+  },
+
+  "escenariosDePrueba": {
+    "_nota": "Disparadores que el prototipo usa para exhibir cada rama de las máquinas de estado. Consérvalos en el cliente falso.",
+    "rfcNoReconocidoPorSat": "XAXX010101000",
+    "correoQueYaTieneAcceso": "ana@despacho.mx",
+    "correoQueFallaAlEnviar": "cualquiera@dominio.test",
+    "codigoMfaRechazado": "000000",
+    "errorSat": { "codigo": 503, "corte": "2026-08-29T19:40:00-06:00", "ultimoIntento": "10:42", "proximoIntentoEn": 900 }
+  }
+}

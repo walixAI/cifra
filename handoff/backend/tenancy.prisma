@@ -1,0 +1,317 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Cifra — modelos de plataforma (inquilinos, identidad, acceso)
+//
+// Se agregan a backend/schema.prisma. Las entidades fiscales que ya están ahí
+// (CFDI, MovimientoBancario, Poliza, Asiento, Declaracion, CuentaContable,
+// CuentaBancaria, Notificacion, ConversacionIA, Constancia, Obligacion…)
+// necesitan TODAS:
+//
+//   contribuyente_id String        @db.Uuid
+//   contribuyente    Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+//   @@index([contribuyente_id, fecha])   // el índice EMPIEZA por contribuyente_id
+//
+// Ver ARQUITECTURA-MULTIINQUILINO.md §4.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Identidad ────────────────────────────────────────────────────────────────
+
+model Usuario {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  nombre        String?
+  email_verificado_en DateTime?
+  creado_en     DateTime @default(now())
+
+  membresias    Membresia[]
+  accesos       Acceso[]
+  bitacora      Bitacora[]
+
+  @@map("usuario")
+}
+
+// ── Inquilino ────────────────────────────────────────────────────────────────
+
+enum TipoOrganizacion {
+  personal   // una persona lleva su propia contabilidad: un solo contribuyente
+  despacho   // lleva la contabilidad de N clientes
+}
+
+model Organizacion {
+  id             String           @id @default(uuid()) @db.Uuid
+  nombre         String
+  tipo           TipoOrganizacion
+  creado_en      DateTime         @default(now())
+
+  membresias     Membresia[]
+  contribuyentes Contribuyente[]
+  invitaciones   Invitacion[]
+  suscripcion    Suscripcion?
+  autorizaciones AutorizacionCredencial[]
+
+  @@map("organizacion")
+}
+
+enum RolOrganizacion {
+  propietario   // todo, incluida facturación
+  admin         // equipo y altas, sin facturación
+  miembro       // solo lo que sus Acceso concedan
+}
+
+model Membresia {
+  id              String          @id @default(uuid()) @db.Uuid
+  usuario_id      String          @db.Uuid
+  organizacion_id String          @db.Uuid
+  rol             RolOrganizacion
+  creado_en       DateTime        @default(now())
+
+  usuario      Usuario      @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id], onDelete: Cascade)
+
+  @@unique([usuario_id, organizacion_id])
+  @@index([organizacion_id])
+  @@map("membresia")
+}
+
+// ── Entidad contable ─────────────────────────────────────────────────────────
+
+model Contribuyente {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizacion_id String   @db.Uuid
+
+  // slug corto derivado del RFC: es el segmento de ruta (/toda7606258i7/impuestos)
+  slug            String   @unique
+  rfc             String
+  nombre          String
+  nombre_completo String?
+  tipo_persona    String   // fisica | moral
+  regimenes       Json     @default("[]")
+  plan            String?
+  activo          Boolean  @default(true)
+
+  responsable_id  String?  @db.Uuid   // miembro del despacho asignado; null en personal
+  creado_en       DateTime @default(now())
+
+  organizacion   Organizacion  @relation(fields: [organizacion_id], references: [id])
+  accesos        Acceso[]
+  credenciales   CredencialFiscal[]
+  autorizaciones AutorizacionCredencial[]
+  resumenes      ResumenContribuyente[]
+  solicitudes    SolicitudPresentacion[]
+  // + todas las entidades fiscales del schema.prisma original
+
+  // RFC único POR ORGANIZACIÓN, no global. Ver §3 del documento: el mismo RFC
+  // puede vivir en la organización personal del dueño y en la de su despacho.
+  @@unique([organizacion_id, rfc])
+  @@index([organizacion_id, activo])
+  @@map("contribuyente")
+}
+
+enum RolAcceso {
+  propietario_fiscal  // dueño del RFC: único que autoriza e.firma y revoca CIEC
+  contador
+  captura
+  solo_lectura
+}
+
+enum EstadoAcceso {
+  invitado
+  activo
+  revocado
+}
+
+model Acceso {
+  id               String       @id @default(uuid()) @db.Uuid
+  contribuyente_id String       @db.Uuid
+  usuario_id       String?      @db.Uuid   // null mientras la invitación no se acepta
+  email            String
+  rol              RolAcceso
+  estado           EstadoAcceso @default(invitado)
+  invitado_en      DateTime     @default(now())
+  expira_en        DateTime                 // 7 días — §4.1 del README
+  token            String?      @unique
+  revocado_en      DateTime?
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+  usuario       Usuario?      @relation(fields: [usuario_id], references: [id])
+
+  @@unique([contribuyente_id, email])   // dispara el estado `conflict` de §4.1
+  @@index([usuario_id, estado])
+  @@map("acceso")
+}
+
+// Invitación a la organización (distinta de Acceso, que es por contribuyente)
+model Invitacion {
+  id              String          @id @default(uuid()) @db.Uuid
+  organizacion_id String          @db.Uuid
+  email           String
+  rol             RolOrganizacion
+  token           String          @unique
+  expira_en       DateTime
+  aceptada_en     DateTime?
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id], onDelete: Cascade)
+
+  @@unique([organizacion_id, email])
+  @@map("invitacion")
+}
+
+// ── Credenciales fiscales ────────────────────────────────────────────────────
+
+enum TipoCredencial {
+  ciec
+  efirma
+}
+
+// Tabla APARTE a propósito: nunca entra en un SELECT * del contribuyente.
+// Cifrado con sobre — ver §4 de ARQUITECTURA.md.
+model CredencialFiscal {
+  id                String         @id @default(uuid()) @db.Uuid
+  contribuyente_id  String         @db.Uuid
+  tipo              TipoCredencial
+  material_cifrado  Bytes          // sobre: llave de datos + payload
+  llave_datos_cifrada Bytes        // envuelta por la maestra (KMS en producción)
+  kms_key_id        String?
+  huella            String?        // para mostrar en UI sin descifrar
+  creado_en         DateTime       @default(now())
+  // Revocar BORRA la fila. No hay booleano de revocación.
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@unique([contribuyente_id, tipo])
+  @@map("credencial_fiscal")
+}
+
+enum AlcanceCredencial {
+  lectura_sat    // bajar CFDI, validar UUID, leer constancia
+  presentacion   // firmar y presentar — requiere e.firma y aprobación por declaración
+}
+
+// Qué organización puede usar las credenciales de qué contribuyente y para qué.
+model AutorizacionCredencial {
+  id               String            @id @default(uuid()) @db.Uuid
+  contribuyente_id String            @db.Uuid
+  organizacion_id  String            @db.Uuid
+  alcance          AlcanceCredencial
+  otorgada_por     String            @db.Uuid   // usuario con rol propietario_fiscal
+  otorgada_en      DateTime          @default(now())
+  revocada_en      DateTime?
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+  organizacion  Organizacion  @relation(fields: [organizacion_id], references: [id], onDelete: Cascade)
+
+  @@unique([contribuyente_id, organizacion_id, alcance])
+  @@map("autorizacion_credencial")
+}
+
+enum EstadoSolicitud {
+  pendiente
+  aprobada
+  rechazada
+  expirada
+  presentada
+}
+
+// La e.firma nunca firma sola. Una solicitud por presentación.
+model SolicitudPresentacion {
+  id               String          @id @default(uuid()) @db.Uuid
+  contribuyente_id String          @db.Uuid
+  declaracion_id   String          @db.Uuid
+  solicitada_por   String          @db.Uuid
+  solicitada_en    DateTime        @default(now())
+  estado           EstadoSolicitud @default(pendiente)
+  hash_calculo     String          // hash del cálculo aprobado: evidencia de QUÉ se aprobó
+  aprobada_por     String?         @db.Uuid   // debe tener rol propietario_fiscal
+  aprobada_en      DateTime?
+  aprobada_ip      String?
+  expira_en        DateTime
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@index([contribuyente_id, estado])
+  @@map("solicitud_presentacion")
+}
+
+// ── SAT: candado global por RFC ──────────────────────────────────────────────
+
+// Una fila por RFC, sin importar en cuántas organizaciones viva.
+// Serializa las bajadas: dos despachos bajando el mismo RFC = bloqueo del SAT.
+model SincronizacionRfc {
+  rfc                String    @id
+  arrendamiento_hasta DateTime?          // lease del worker en curso
+  worker_id          String?
+  cursor             DateTime?           // hasta dónde se bajó
+  ultimo_intento     DateTime?
+  ultimo_error       String?
+  proximo_intento_en DateTime?
+
+  @@map("sincronizacion_rfc")
+}
+
+// ── Cartera del despacho ─────────────────────────────────────────────────────
+
+// Resumen precalculado, una fila por contribuyente y periodo. Lo escriben los
+// trabajos de Inngest al terminar. La cartera lee de aquí y NUNCA recalcula.
+// Ver §6 del documento.
+model ResumenContribuyente {
+  id               String   @id @default(uuid()) @db.Uuid
+  contribuyente_id String   @db.Uuid
+  periodo          String   // '2026-08'
+
+  ingresos_centavos BigInt  @default(0)
+  gastos_centavos   BigInt  @default(0)
+  iva_centavos      BigInt  @default(0)
+  isr_centavos      BigInt  @default(0)
+
+  cfdi_sin_clasificar   Int  @default(0)
+  movimientos_sin_conciliar Int @default(0)
+  cuadre_estado         String @default("ok")   // ok | warning | error — §3.5
+  cierre_pasos_completos Int  @default(0)       // de 9 — §3.6
+  proxima_obligacion    DateTime?
+  sat_stale             Boolean @default(false)
+  sat_corte             DateTime?
+  actualizado_en        DateTime @updatedAt
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@unique([contribuyente_id, periodo])
+  @@index([periodo, proxima_obligacion])
+  @@map("resumen_contribuyente")
+}
+
+// ── Bitácora ─────────────────────────────────────────────────────────────────
+
+// Solo escritura. Sin UPDATE ni DELETE, para nadie.
+model Bitacora {
+  id               String   @id @default(uuid()) @db.Uuid
+  usuario_id       String?  @db.Uuid
+  organizacion_id  String?  @db.Uuid
+  contribuyente_id String?  @db.Uuid
+  accion           String   // uso_credencial | presentacion | poliza_editada | acceso_cambiado | exportacion…
+  entidad          String?
+  entidad_id       String?
+  ip               String?
+  metadatos        Json?
+  creado_en        DateTime @default(now())
+
+  usuario Usuario? @relation(fields: [usuario_id], references: [id])
+
+  @@index([contribuyente_id, creado_en])
+  @@index([organizacion_id, creado_en])
+  @@map("bitacora")
+}
+
+// ── Facturación ──────────────────────────────────────────────────────────────
+
+model Suscripcion {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizacion_id String   @unique @db.Uuid
+  plan            String
+  estado          String   // activa | morosa | suspendida | cancelada
+  rfc_incluidos   Int
+  periodo_fin     DateTime?
+  proveedor_id    String?
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id], onDelete: Cascade)
+
+  @@map("suscripcion")
+}

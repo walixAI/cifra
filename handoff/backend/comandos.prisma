@@ -1,0 +1,98 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Cifra — modelos de la capa de comandos
+//
+// Se agregan a backend/schema.prisma. Llevan contribuyente_id no nulo y quedan
+// bajo RLS con rls.sql. Ver ARQUITECTURA-COMANDOS.md.
+//
+// Reutilizan AccionEjecutada y Bitacora, que ya existen. El registro de
+// acciones es el mismo que usan las sugerencias: vive en código
+// (packages/ia/acciones), no en la base.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ClaseComando {
+  consulta    // no cambia nada: se responde directo
+  artefacto   // produce un archivo: confirmación de alcance
+  operacion   // cambia algo: plan → confirmación → ejecución
+}
+
+enum EstadoPlan {
+  borrador       // faltan parámetros o hay ambigüedad: se está preguntando
+  esperando      // vista previa mostrada, esperando confirmación
+  confirmado
+  ejecutando     // encolado en Inngest (comandos largos)
+  ejecutado
+  rechazado      // el usuario canceló
+  caducado       // pasaron los 10 minutos
+  invalidado     // los datos cambiaron: el hash ya no cuadra
+  fallido
+}
+
+model Plan {
+  id               String       @id @default(uuid()) @db.Uuid
+  contribuyente_id String       @db.Uuid
+  usuario_id       String       @db.Uuid
+  conversacion_id  String?      @db.Uuid
+
+  frase_original   String
+  clase            ClaseComando
+  accion_tipo      String       // clave del registro cerrado de packages/ia/acciones
+  parametros       Json         // resueltos y validados con el esquema Zod de la acción
+
+  // Cómo se resolvió cada ambigüedad. Se le muestra al usuario ANTES de confirmar:
+  // [{ dijo: 'el mes pasado', entendi: 'julio 2026', porque: 'hoy es 1 sep' }]
+  resolucion       Json         @default("[]")
+  // Qué va a cambiar, en pesos y en registros:
+  // [{ que: 'Se timbra un CFDI de ingreso', monto_centavos: 4640000 }]
+  efectos          Json         @default("[]")
+  // Lo que no se puede deshacer. Va arriba del botón, no en letra chica.
+  advertencias     Json         @default("[]")
+  // Lo que falta o está ambiguo, cuando estado = borrador
+  preguntas        Json         @default("[]")
+
+  reversible       Boolean      @default(true)
+  requiere_rol     String       // se verifica en el EJECUTOR, no aquí
+
+  // Cubre parámetros + estado de los datos de los que depende el plan.
+  // Al confirmar se recalcula: si no coincide, el plan se invalida y se muestra
+  // el nuevo. Nunca se ejecuta a ciegas sobre otra realidad.
+  hash_estado      String
+  token            String       @unique   // un solo uso
+  expira_en        DateTime                // 10 minutos
+
+  estado           EstadoPlan   @default(borrador)
+  creado_en        DateTime     @default(now())
+  confirmado_en    DateTime?
+  confirmado_por   String?      @db.Uuid
+  confirmado_ip    String?
+  ejecutado_en     DateTime?
+  accion_ejecutada_id String?   @db.Uuid
+  trabajo_id       String?                 // Inngest, para comandos largos
+  error            String?
+
+  // Evita que un doble clic o un reintento de red timbre dos facturas.
+  clave_idempotencia String     @unique
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@index([contribuyente_id, estado, creado_en])
+  @@index([usuario_id, creado_en])
+  @@map("plan")
+}
+
+// Planes descartados y clasificaciones fallidas: la mejor señal de dónde el
+// enrutador entiende mal. Sin PII, retención corta.
+model FalloComando {
+  id               String   @id @default(uuid()) @db.Uuid
+  contribuyente_id String   @db.Uuid
+  motivo           String   // fuera_de_alcance | ambiguo | sin_permiso | invalidado | rechazado
+  accion_tipo      String?
+  clase_detectada  ClaseComando?
+  metadatos        Json?
+  creado_en        DateTime @default(now())
+
+  contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
+
+  @@index([contribuyente_id, motivo, creado_en])
+  @@map("fallo_comando")
+}
+

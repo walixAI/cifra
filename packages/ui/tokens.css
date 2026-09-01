@@ -1,0 +1,161 @@
+/* Cifra — design tokens
+ * Extraídos del prototipo. Dos temas sobre los mismos nombres.
+ * Modo noche: document.documentElement.dataset.theme = 'night'
+ *
+ * Semántica que hay que respetar:
+ *   --accent  petróleo         acciones primarias, navegación, sidebar
+ *   --ia      turquesa         SOLO la voz de la IA (es el único tono que lee igual en ambos temas)
+ *   --act     naranja quemado  SOLO acciones secundarias urgentes y presión de fechas
+ *   --data    violeta          SOLO comparativos y datos en el tiempo
+ *   --pos/--warn/--neg         semáforo del sistema, nunca decorativo
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+:root {
+  /* superficies */
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --sidebar: #ffffff;
+  --inset: #f8fafc;
+  --chip: #eef1f5;
+  --line: #e6e9ee;
+  --line2: #eef1f5;
+
+  /* texto */
+  --text: #111827;
+  --muted: #6b7280;
+  --faint: #8b939f;
+
+  /* marca */
+  --accent: #12507f;
+  --accent-2: #2f7fbf;
+  --accent-soft: #eaf2f9;
+  --accent-line: #dde7f0;
+  --onaccent: #ffffff;
+
+  /* semáforo */
+  --pos: #146c43;   --pos-bg: #e7f5ee;
+  --neg: #b42318;   --neg-bg: #fee4e2;
+  --warn: #b54708;  --warn-bg: #fef0c7;
+
+  /* roles especiales */
+  --ia: #0f7c8a;    --ia-bg: #e3f2f4;   --ia-line: #c4e2e6;  --onia: #ffffff;
+  --data: #5b4bb8;  --data-bg: #ecebfa;
+  --act: #c2410c;   --act-bg: #ffedd5;
+
+  /* barra lateral */
+  --sb: #12507f;
+  --sb-text: #f2f7fb;
+  --sb-muted: rgba(242, 247, 251, 0.72);
+  --sb-faint: rgba(242, 247, 251, 0.5);
+  --sb-active: rgba(255, 255, 255, 0.16);
+  --sb-hover: rgba(255, 255, 255, 0.09);
+  --sb-line: rgba(255, 255, 255, 0.16);
+  --sb-fill: rgba(255, 255, 255, 0.12);
+
+  /* varios */
+  --bar: #c8d3de;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --radius: 14px;
+
+  /* tipografía */
+  --font-ui: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html[data-theme="night"] {
+  --bg: #0f1417;
+  --panel: #141b1f;
+  --sidebar: #131a1e;
+  --inset: #182023;
+  --chip: #1a2226;
+  --line: #212b30;
+  --line2: #1e282d;
+
+  --text: #e8ecef;
+  --muted: #8a969c;
+  --faint: #6f7c83;
+
+  --accent: #2fbfa8;
+  --accent-2: #2fbfa8;
+  --accent-soft: rgba(47, 191, 168, 0.12);
+  --accent-line: #2b4a45;
+  --onaccent: #08201d;
+
+  --pos: #57cfc0;   --pos-bg: rgba(47, 191, 168, 0.14);
+  --neg: #e07a8b;   --neg-bg: rgba(224, 122, 139, 0.14);
+  --warn: #d8a24a;  --warn-bg: rgba(216, 162, 74, 0.14);
+
+  --ia: #3ec7c0;    --ia-bg: rgba(62, 199, 192, 0.13);  --ia-line: rgba(62, 199, 192, 0.28);  --onia: #062622;
+  --data: #9a8cf0;  --data-bg: rgba(154, 140, 240, 0.14);
+  --act: #e08d5a;   --act-bg: rgba(224, 141, 90, 0.14);
+
+  --sb: #0d2a31;
+  --sb-text: #e4efee;
+  --sb-muted: rgba(228, 239, 238, 0.66);
+  --sb-faint: rgba(228, 239, 238, 0.44);
+  --sb-active: rgba(47, 191, 168, 0.22);
+  --sb-hover: rgba(255, 255, 255, 0.06);
+  --sb-line: rgba(255, 255, 255, 0.1);
+  --sb-fill: rgba(255, 255, 255, 0.07);
+
+  --bar: #3a4b53;
+  --shadow: none;
+}
+
+/* ---- base ---- */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { color: var(--accent); text-decoration: underline; }
+
+button { font-family: inherit; cursor: pointer; }
+table { border-collapse: collapse; width: 100%; }
+
+/* Toda cifra, RFC, UUID y código de cuenta lleva esta clase. */
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+
+/* ---- movimiento ----
+ * Duraciones del prototipo. Respétalas: son parte de cómo se siente el producto.
+ */
+@keyframes cifraIn    { from { opacity: 0; transform: translateY(5px); }  to { opacity: 1; transform: none; } }
+@keyframes cifraSlide { from { opacity: 0; transform: translateX(22px); } to { opacity: 1; transform: none; } }
+@keyframes cifraPop   { from { opacity: 0; transform: scale(.97) translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes cifraPulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+@keyframes cifraDots  { 0%, 100% { opacity: .25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+@keyframes cifraSpin  { to { transform: rotate(360deg); } }
+
+/*  entrada de pantalla   cifraIn    220ms ease-out
+ *  cajón lateral         cifraSlide 220ms cubic-bezier(.22,.61,.36,1)   ancho 472px
+ *  modal                 cifraIn    160ms ease-out                      scrim rgba(8,12,14,.42), top 11vh
+ *  menú                  cifraPop   150ms ease-out
+ *  spinner               cifraSpin  900ms linear infinite
+ *  "pensando" de la IA   cifraDots  1.1s, retraso escalonado de 180ms
+ *  contadores            640ms easeOutCubic al cambiar de periodo
+ *  toast                 se cierra solo a los 3.6s
+ *  colapso del sidebar   236px → 68px, 200ms cubic-bezier(.22,.61,.36,1)
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

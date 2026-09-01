@@ -1,0 +1,19 @@
+{
+  "name": "cifra",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @cifra/web dev",
+    "build": "pnpm -r --if-present build",
+    "start": "pnpm --filter @cifra/web start",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@types/node": "catalog:"
+  }
+}
