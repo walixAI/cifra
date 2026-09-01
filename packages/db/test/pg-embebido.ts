@@ -84,7 +84,9 @@ export async function levantarPgEmbebido(): Promise<PgEmbebido> {
     puerto,
     async detener() {
       await pg.stop();
-      rmSync(dataDir, { recursive: true, force: true });
+      // En Windows el proceso de postgres puede tardar un instante en soltar los handles del
+      // directorio de datos después de salir; reintentar evita un EBUSY espurio en la limpieza.
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     },
   };
 }

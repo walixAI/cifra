@@ -4,8 +4,9 @@ Esquema de plataforma (inquilinos, identidad, acceso), aislamiento por fila con 
 con alcance, y las migraciones. Ver `handoff/ARQUITECTURA-MULTIINQUILINO.md`.
 
 ```
-prisma/schema.prisma          modelos de tenancy.prisma (Usuario, Organizacion, Contribuyente…)
-prisma/migrations/            _plataforma: tablas + rls.sql, incluido en la propia migración
+prisma/schema.prisma          plataforma (tenancy.prisma) + entidades fiscales (paso 3)
+prisma/migrations/            _plataforma y _fiscal: tablas + rls.sql, cada una en su propia migración
+scripts/generar-migracion.mjs autoría de migraciones nuevas sin Neon ni Docker (ver abajo)
 src/cliente.ts                singleton sin alcance — solo plataforma, nunca datos con dinero
 src/alcance.ts                prismaPara(contribuyenteId) — el cliente que sí deben usar los handlers
 src/generated/client/         cliente de Prisma generado (gitignored, `pnpm prisma:generate`)
@@ -56,9 +57,26 @@ política la que falló, no el test. No necesita `.env` ni Neon.
    RESET ROLE;
    ```
 
-## Cuando el paso 3 agregue las tablas fiscales
+## Generar una migración nueva sin Neon ni Docker
 
-Cada entidad nueva con `contribuyente_id` no nulo necesita una migración que **vuelva a incluir**
-el cuerpo de `rls.sql` (es idempotente: solo toca las tablas que aún no tienen la política). No
-se corre a mano ni en Neon ni en local — siempre dentro de una migración de Prisma, igual que
-aquí.
+```bash
+pnpm --filter @cifra/db prisma:migrate:generar <nombre>
+```
+
+Levanta el mismo Postgres embebido de las pruebas, aplica las migraciones que ya existen
+(`prisma migrate deploy`, tal cual correría en producción) y difiere el `schema.prisma` actual
+contra ese estado (`prisma migrate dev --create-only`). El `migration.sql` que resulta hay que
+revisarlo a mano — y **si toca alguna tabla con `contribuyente_id` no nulo nueva, hay que
+pegarle otra vez el cuerpo de `handoff/backend/rls.sql` al final**. Es idempotente (solo toca
+las tablas que aún no tienen la política), no se hace solo, y no es opcional: así se generaron
+las dos migraciones que ya existen (`_plataforma` y `_fiscal`).
+
+## Entidades fiscales (paso 3) — dos decisiones que vale la pena tener presentes
+
+- **`Cfdi.uuid` es único por `(contribuyente_id, uuid)`, no globalmente.** El mismo UUID puede
+  vivir en dos libros a la vez si el emisor y el receptor son ambos contribuyentes de Cifra.
+- **El dinero que alimenta el motor fiscal nunca vive en un `Json`.** `Cfdi.impuestos` (lo que
+  packages/core/impuestos va a sumar para IVA/ISR) se normalizó a `CfdiImpuesto`, con
+  `importe_centavos BigInt` real. `conceptos` y `Declaracion.calculo` se quedan en `Json` a
+  propósito —detalle de despliegue y snapshot de auditoría, no fuente de verdad para sumar— pero
+  cualquier importe que se guarde ahí es centavos enteros como string, nunca `number` flotante.
