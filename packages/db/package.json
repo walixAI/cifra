@@ -10,9 +10,22 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "test": "vitest run",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "@types/node": "catalog:",
+    "@types/pg": "^8.11.10",
+    "embedded-postgres": "17.10.0-beta.17",
+    "pg": "^8.13.1",
+    "prisma": "6.19.3",
+    "typescript": "catalog:",
+    "vitest": "4.1.11"
   }
 }

@@ -1,3 +1,9 @@
-// @cifra/db — esquema Prisma, cliente con alcance por contribuyente_id (RLS), migraciones y seed.
-// Entra a partir del paso 2 de PRIMEROS-PASOS.md (inquilinos y aislamiento, antes que nada más).
-export {};
+// @cifra/db — esquema Prisma de plataforma, cliente con alcance por contribuyente_id (RLS) y
+// migraciones. Las entidades fiscales y su cliente de seed llegan en el paso 3 de
+// PRIMEROS-PASOS.md.
+
+export { prisma } from "./cliente";
+export { prismaPara, type ClienteConAlcance } from "./alcance";
+
+export { PrismaClient, Prisma } from "./generated/client";
+export type * from "./generated/client";

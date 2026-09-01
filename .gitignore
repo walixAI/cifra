@@ -10,6 +10,9 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
+# prisma
+packages/db/src/generated/
+
 # entorno — nunca CIEC, e.firma ni llaves reales
 .env
 .env.local

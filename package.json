@@ -10,7 +10,8 @@
     "dev": "pnpm --filter @cifra/web dev",
     "build": "pnpm -r --if-present build",
     "start": "pnpm --filter @cifra/web start",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
     "typescript": "catalog:",

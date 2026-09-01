@@ -7,7 +7,13 @@ catalog:
   typescript: ^5.7.3
   "@types/node": ^22.10.5
 
+# Paquetes con postinstall que sí necesitamos: Prisma descarga sus engines,
+# embedded-postgres descarga el binario de Postgres para las pruebas de packages/db.
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"
   - sharp
   - esbuild
+  - "@embedded-postgres/windows-x64"
+  - "@prisma/client"
+  - "@prisma/engines"
+  - prisma
