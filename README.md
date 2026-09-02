@@ -26,3 +26,5 @@ pnpm install
 pnpm dev         # levanta apps/web en http://localhost:3000
 pnpm typecheck   # tsc --noEmit en todos los paquetes
 ```
+
+<!-- prueba de despliegue: CI + preview de Vercel + rama de Neon -->
