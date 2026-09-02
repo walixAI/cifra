@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "build": "cross-env NEXT_DIST_DIR=.next-build next build",
+    "start": "cross-env NEXT_DIST_DIR=.next-build next start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -21,6 +21,7 @@
     "@types/node": "catalog:",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "cross-env": "^10.1.0",
     "tailwindcss": "^4.0.0",
     "typescript": "catalog:"
   }
