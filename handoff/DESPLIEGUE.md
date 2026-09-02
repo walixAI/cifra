@@ -1,7 +1,11 @@
 # Despliegue — Cifra
 
-Paso 6 de `PRIMEROS-PASOS.md`. La parte de CI (GitHub Actions) ya está en el repo y funciona.
-Vercel y Neon hay que conectarlos desde sus paneles con tu cuenta — son pasos de una sola vez.
+Paso 6 de `PRIMEROS-PASOS.md`.
+
+- **CI (GitHub Actions):** ya está en el repo y corre en cada PR. ✅
+- **Bloquear el merge cuando CI falla:** necesita GitHub Pro o repo público (§1). ⚠️
+- **Vercel y Neon:** hay que conectarlos desde sus paneles con tu cuenta — pasos de una sola
+  vez (§2–3). ⚠️
 
 ---
 
@@ -14,29 +18,40 @@ Vercel y Neon hay que conectarlos desde sus paneles con tu cuenta — son pasos 
 | `estatico-y-motor` | `pnpm typecheck` · `pnpm lint` · `pnpm build` · pruebas de `packages/core` |
 | `aislamiento` | la prueba de aislamiento entre organizaciones del paso 2 (`packages/db`, Postgres embebido) |
 
-Para que **ningún PR se pueda mezclar si algo falla**, hay que exigir estos checks en la
-protección de rama. Una vez que el workflow haya corrido al menos una vez (para que GitHub
-conozca los nombres de los checks):
+### Bloquear el merge si CI falla — necesita GitHub Pro (o repo público)
 
-```bash
-gh api -X PUT repos/walixAI/cifra/branches/main/protection \
-  --input - <<'JSON'
-{
-  "required_status_checks": {
-    "strict": true,
-    "checks": [
-      { "context": "typecheck · lint · build · pruebas del motor" },
-      { "context": "prueba de aislamiento (RLS)" }
-    ]
-  },
-  "enforce_admins": false,
-  "required_pull_request_reviews": null,
-  "restrictions": null
-}
-JSON
-```
+La protección de rama y los rulesets **no están disponibles en repos privados del plan
+gratuito** de GitHub: la API responde `403 "Upgrade to GitHub Pro or make this repository
+public"`. Hay dos caminos:
 
-(`strict: true` = el PR tiene que estar al día con `main` antes de mezclar.)
+- **GitHub Pro** (~$4/mes): desbloquea la protección de rama en privado. Con eso, y con el
+  workflow ya corrido al menos una vez:
+  ```bash
+  gh api -X PUT repos/walixAI/cifra/branches/main/protection --input - <<'JSON'
+  {
+    "required_status_checks": {
+      "strict": true,
+      "checks": [
+        { "context": "typecheck · lint · build · pruebas del motor" },
+        { "context": "prueba de aislamiento (RLS)" }
+      ]
+    },
+    "enforce_admins": false,
+    "required_pull_request_reviews": null,
+    "restrictions": null
+  }
+  JSON
+  ```
+  (`strict: true` = el PR tiene que estar al día con `main` antes de mezclar.) O hacerlo desde
+  la UI: *Settings → Branches → Add branch ruleset*, `main`, *Require status checks to pass*,
+  y elegir los dos checks.
+
+- **Hacer el repo público**: `gh repo edit walixAI/cifra --visibility public`. Entonces todo lo
+  de arriba funciona sin pagar. (El paso 1 pidió repo privado, así que esta es una decisión
+  tuya.)
+
+Mientras tanto, CI **sí corre en cada PR** y se ve rojo/verde; lo único que falta es el bloqueo
+automático del botón de merge.
 
 ---
 
