@@ -1,0 +1,76 @@
+name: CI
+
+# Compuerta de merge. El paso 6 de PRIMEROS-PASOS.md: typecheck, lint, las pruebas de
+# packages/core y la prueba de aislamiento del paso 2. Ningún PR se mezcla si algo falla —
+# eso se hace exigiendo estos checks en la protección de rama de `main` (ver handoff/DESPLIEGUE.md).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Un PR que recibe un push nuevo cancela la corrida anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Ni las pruebas ni el build hablan con un SAT, un banco ni un Neon real.
+  SAT_MODO: falso
+  BANCOS_MODO: falso
+  # La prueba de aislamiento levanta su propio Postgres embebido y fija su propia cadena; esto
+  # es solo para que `prisma generate` y el build no se quejen de la variable ausente.
+  DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+  DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+
+jobs:
+  # ── Compuerta 1: estático + motor fiscal ──────────────────────────────────
+  estatico-y-motor:
+    name: typecheck · lint · build · pruebas del motor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # El cliente de Prisma está gitignored: se genera. apps/web y las pruebas lo importan.
+      - run: pnpm --filter @cifra/db exec prisma generate
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      - run: pnpm build
+
+      - name: Pruebas de packages/core (motor fiscal)
+        run: pnpm test:core
+
+  # ── Compuerta 2: aislamiento entre inquilinos (paso 2) ─────────────────────
+  aislamiento:
+    name: prueba de aislamiento (RLS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # embedded-postgres se niega a correr como root; el runner de ubuntu ya es un usuario
+      # normal, así que no hay nada que hacer aquí — solo dejarlo anotado.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @cifra/db exec prisma generate
+
+      - name: Prueba de aislamiento entre organizaciones
+        run: pnpm test:aislamiento

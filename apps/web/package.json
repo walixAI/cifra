@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "cross-env NEXT_DIST_DIR=.next-build next build",
-    "start": "cross-env NEXT_DIST_DIR=.next-build next start",
+    "build": "next build",
+    "build:verificar": "cross-env NEXT_DIST_DIR=.next-verificar next build",
+    "start": "next start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -8,12 +8,17 @@ catalog:
   "@types/node": ^22.10.5
 
 # Paquetes con postinstall que sí necesitamos: Prisma descarga sus engines,
-# embedded-postgres descarga el binario de Postgres para las pruebas de packages/db.
+# embedded-postgres descarga el binario de Postgres para las pruebas de packages/db (uno por
+# plataforma — el de linux-x64 es el que corre en CI).
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"
   - sharp
   - esbuild
   - "@embedded-postgres/windows-x64"
+  - "@embedded-postgres/linux-x64"
+  - "@embedded-postgres/linux-arm64"
+  - "@embedded-postgres/darwin-x64"
+  - "@embedded-postgres/darwin-arm64"
   - "@prisma/client"
   - "@prisma/engines"
   - prisma
