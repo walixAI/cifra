@@ -83,11 +83,15 @@ export async function levantarPgEmbebido(): Promise<PgEmbebido> {
     urlApp,
     puerto,
     async detener() {
-      await pg.stop();
-      // En Windows el proceso de postgres tarda un momento en soltar los handles del directorio
-      // de datos después de salir. Se reintenta borrar; si aun así no se puede, se deja el
-      // directorio (está en el temp del SO, se limpia solo) — un EBUSY en la limpieza no debe
-      // tumbar una corrida de pruebas que ya pasó.
+      // En Windows, bajo carga de I/O, el postgres embebido tarda en soltar los handles del
+      // directorio de datos. Tanto `pg.stop()` (que con persistent:false borra los datos) como
+      // el `rmSync` de respaldo pueden dar EBUSY. Nada de eso debe tumbar una corrida que YA
+      // pasó: el directorio vive en el temp del SO y se limpia solo.
+      try {
+        await pg.stop();
+      } catch (error) {
+        console.warn(`pg.stop() falló (${(error as Error).message}); el proceso ya salió.`);
+      }
       try {
         rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
       } catch (error) {
