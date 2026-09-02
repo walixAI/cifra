@@ -1,153 +1,133 @@
-// La suite de regresión de la sección 3.7 del README — la tabla que agosto, el trimestre
-// jun–ago y el año ene–ago tienen que reproducir exactamente (paso 4 de PRIMEROS-PASOS.md).
+// Suite de regresión de la sección 3.7 del README — la tabla que agosto, el trimestre jun–ago
+// y el año ene–ago tienen que reproducir exactamente (paso 4 de PRIMEROS-PASOS.md).
 //
-// Dos tipos de aserción, a propósito distintos:
+// Historia de esta tabla: los números de ISR del fixture original ($11,880 / $12,940 / $13,410
+// / $14,320) eran ficticios — nunca salieron de aplicar la tarifa real a la base. Se
+// recalcularon con la tarifa real de 2026 (Anexo 8) y con la fórmula completa del artículo 106,
+// que incluye restar el ISR retenido por personas morales (§3.2, corregido). Los números de IVA
+// no se tocaron: esos sí cuadraban.
 //
-//   1. Invariantes sobre la tabla misma — ingresos − gastos = utilidad, utilidad / ingresos =
-//      margen, iva + isr = total, y el trimestre es la suma exacta de sus tres meses. Esto
-//      prueba que la tabla del README es consistente consigo misma (una red de seguridad si
-//      alguien la edita a mano después), no que el motor la reproduzca.
-//   2. Motor de verdad, sobre agosto — el único periodo del que el README da el desglose
-//      completo (calculoIvaAgosto y calculoIsrAgosto), así que es el único que se puede correr
-//      de punta a punta por calcularIva/evaluarCuadreIva/calcularIsr en vez de solo comparar
-//      constantes.
-//
-// El hallazgo que hay que dejar por escrito aquí: el ISR de agosto que el motor da con la
-// tarifa REAL de 2026 (impuestos/isr.ts) NO es $14,320. Es $75,430.66 — ver el porqué en
-// __tests__/isr.test.ts. Los $14,320 de esta tabla son una cifra ilustrativa del prototipo,
-// nunca calculada con la tarifa 2026 real; no se afirma esa cifra aquí ni en isr.ts.
+// Reconstrucción de los meses: el fixture da los agregados (utilidad de agosto, de jun–ago, de
+// ene–ago, de abr–ago) pero NO la utilidad mes a mes de abril, mayo, junio y julio. Donde falta
+// el dato, se parte la utilidad del par por igual (abr=may, jun=jul). Ese supuesto solo mueve
+// el valor de las filas individuales de esos meses; los invariantes se cumplen igual, porque el
+// pago de cada mes es CumPago(m) − CumPago(m−1) y la suma telescópica no depende del reparto
+// interno.
 
 import { describe, expect, it } from "vitest";
+import { calcularIsr, aplicarTarifaIsr } from "../impuestos/isr";
 import { evaluarCuadreIva } from "../contabilidad/cuadre";
 import { calcularIva, type CfdiParaIva, type Periodo } from "../impuestos/iva";
 
-interface FilaTabla {
-  periodo: string;
-  ingresosCentavos: bigint | null;
-  gastosCentavos: bigint | null;
-  utilidadCentavos: bigint | null;
-  ivaCentavos: bigint;
-  isrCentavos: bigint;
-  totalImpuestosCentavos: bigint;
-  margenPorcentaje: number | null;
+const EJERCICIO = 2026;
+const RETENCION_PM_ACUMULADA_AGOSTO = 427_500n; // $4,275.00 — 10% ISR sobre servicios profesionales
+
+/** Redondeo mitad hacia arriba en centavos enteros — mismo criterio que impuestos/isr.ts. */
+function repartirRetencion(mes: number): bigint {
+  return (RETENCION_PM_ACUMULADA_AGOSTO * BigInt(mes) + 4n) / 8n;
 }
 
-// Tal cual la tabla de la sección 3.7 del README, en centavos.
-const TABLA_3_7: Record<string, FilaTabla> = {
-  mayo: {
-    periodo: "Mayo 2026",
-    ingresosCentavos: null,
-    gastosCentavos: null,
-    utilidadCentavos: null,
-    ivaCentavos: 714_000n,
-    isrCentavos: 1_188_000n,
-    totalImpuestosCentavos: 1_902_000n,
-    margenPorcentaje: null,
-  },
-  junio: {
-    periodo: "Junio 2026",
-    ingresosCentavos: null,
-    gastosCentavos: null,
-    utilidadCentavos: null,
-    ivaCentavos: 801_000n,
-    isrCentavos: 1_294_000n,
-    totalImpuestosCentavos: 2_095_000n,
-    margenPorcentaje: null,
-  },
-  julio: {
-    periodo: "Julio 2026",
-    ingresosCentavos: null,
-    gastosCentavos: null,
-    utilidadCentavos: null,
-    ivaCentavos: 786_000n,
-    isrCentavos: 1_341_000n,
-    totalImpuestosCentavos: 2_127_000n,
-    margenPorcentaje: null,
-  },
-  agosto: {
-    periodo: "Agosto 2026",
-    ingresosCentavos: 18_542_000n,
-    gastosCentavos: 7_428_000n,
-    utilidadCentavos: 11_114_000n,
-    ivaCentavos: 842_000n,
-    isrCentavos: 1_432_000n,
-    totalImpuestosCentavos: 2_274_000n,
-    margenPorcentaje: 59.9,
-  },
-  trimestreJunAgo: {
-    periodo: "Trimestre jun–ago",
-    ingresosCentavos: 51_268_000n,
-    gastosCentavos: 22_194_000n,
-    utilidadCentavos: 29_074_000n,
-    ivaCentavos: 2_429_000n,
-    isrCentavos: 4_067_000n,
-    totalImpuestosCentavos: 6_496_000n,
-    margenPorcentaje: 56.7,
-  },
-  anioEneAgo: {
-    periodo: "Año ene–ago",
-    ingresosCentavos: 128_664_000n,
-    gastosCentavos: 47_430_000n,
-    utilidadCentavos: 81_234_000n,
-    ivaCentavos: 5_784_000n,
-    isrCentavos: 11_336_000n,
-    totalImpuestosCentavos: 17_120_000n,
-    margenPorcentaje: 63.1,
-  },
-  personalizado1AbrA31Ago: {
-    periodo: "1 abr – 31 ago",
-    ingresosCentavos: 84_291_000n,
-    gastosCentavos: 32_918_000n,
-    utilidadCentavos: 51_373_000n,
-    ivaCentavos: 3_765_000n,
-    isrCentavos: 7_077_000n,
-    totalImpuestosCentavos: 10_842_000n,
-    margenPorcentaje: 60.9,
-  },
-};
+// Bases acumuladas a fin de mes (ingresos acumulados − deducciones acumuladas), en centavos.
+// Derivadas de los agregados del fixture (§3.7) + el reparto por igual de los pares sin dato.
+const BASE_MARZO = 29_861_000n; // = base_ago − utilidad(abr–ago) = 81,234,000 − 51,373,000
+const UTILIDAD_ABR_MAY = 52_160_000n - BASE_MARZO; // base_may − base_mar
+const BASE_ABRIL = BASE_MARZO + UTILIDAD_ABR_MAY / 2n; // supuesto: abril = mayo
+const BASE_MAYO = 52_160_000n; // = base_ago − utilidad(jun–ago) = 81,234,000 − 29,074,000
+const UTILIDAD_JUN_JUL = 70_120_000n - BASE_MAYO; // base_jul − base_may
+const BASE_JUNIO = BASE_MAYO + UTILIDAD_JUN_JUL / 2n; // supuesto: junio = julio
+const BASE_JULIO = 70_120_000n; // = base_ago − utilidad(agosto) = 81,234,000 − 11,114,000
+const BASE_AGOSTO = 81_234_000n; // = ingresos ene–ago − deducciones ene–ago
 
-function margenCalculado(fila: FilaTabla): number | null {
-  if (fila.ingresosCentavos === null || fila.utilidadCentavos === null) return null;
-  // Redondeo a 1 decimal en BigInt (mitad hacia arriba), no truncado: round(a/b) = (a+b/2)/b.
-  const decimas =
-    (fila.utilidadCentavos * 1000n + fila.ingresosCentavos / 2n) / fila.ingresosCentavos;
-  return Number(decimas) / 10;
+/** ISR pagado acumulado hasta fin de mes m = tarifa(base_m, m) − retención acumulada_m. */
+function cumPago(baseCentavos: bigint, mes: number): bigint {
+  return aplicarTarifaIsr(baseCentavos, mes, EJERCICIO) - repartirRetencion(mes);
 }
 
-describe("sección 3.7 del README — invariantes de la tabla", () => {
-  it.each(Object.entries(TABLA_3_7))("%s: ingresos − gastos = utilidad", (_clave, fila) => {
-    if (fila.ingresosCentavos === null) return; // mayo/junio/julio no traen desglose de ingresos
-    expect(fila.ingresosCentavos - fila.gastosCentavos!).toBe(fila.utilidadCentavos);
+describe("sección 3.7 — reconstrucción del ISR con la tarifa real de 2026", () => {
+  const cumMarzo = cumPago(BASE_MARZO, 3);
+  const cumAbril = cumPago(BASE_ABRIL, 4);
+  const cumMayo = cumPago(BASE_MAYO, 5);
+  const cumJunio = cumPago(BASE_JUNIO, 6);
+  const cumJulio = cumPago(BASE_JULIO, 7);
+  const cumAgosto = cumPago(BASE_AGOSTO, 8);
+
+  const isrMayo = cumMayo - cumAbril;
+  const isrJunio = cumJunio - cumMayo;
+  const isrJulio = cumJulio - cumJunio;
+  const isrAgosto = cumAgosto - cumJulio;
+
+  it("pago provisional de cada mes (para el histórico de la pantalla de Impuestos)", () => {
+    expect(isrMayo).toBe(2_665_021n); // $26,650.21
+    expect(isrJunio).toBe(2_014_171n); // $20,141.71
+    expect(isrJulio).toBe(2_014_170n); // $20,141.70
+    expect(isrAgosto).toBe(2_654_371n); // $26,543.71
   });
 
-  it.each(Object.entries(TABLA_3_7))("%s: utilidad / ingresos = margen (±0.05 pp)", (_clave, fila) => {
-    if (fila.margenPorcentaje === null) return;
-    expect(margenCalculado(fila)).toBeCloseTo(fila.margenPorcentaje, 1);
+  it("trimestre jun–ago = suma exacta de sus tres meses (invariante de CLAUDE.md)", () => {
+    const trimestre = isrJunio + isrJulio + isrAgosto;
+    expect(trimestre).toBe(6_682_712n); // $66,827.12
+    expect(trimestre).toBe(cumAgosto - cumMayo); // se cumple por construcción telescópica
   });
 
-  it.each(Object.entries(TABLA_3_7))("%s: iva + isr = total de impuestos", (_clave, fila) => {
-    expect(fila.ivaCentavos + fila.isrCentavos).toBe(fila.totalImpuestosCentavos);
+  it("acumulado ene–ago = todo el ISR provisional del ejercicio hasta agosto", () => {
+    expect(cumAgosto).toBe(18_931_566n); // $189,315.66
   });
 
-  it("el trimestre jun–ago es la suma exacta de junio + julio + agosto", () => {
-    const suma = (campo: keyof FilaTabla) =>
-      (TABLA_3_7.junio![campo] as bigint) +
-      (TABLA_3_7.julio![campo] as bigint) +
-      (TABLA_3_7.agosto![campo] as bigint);
+  it("1 abr – 31 ago", () => {
+    expect(cumAgosto - cumMarzo).toBe(12_012_754n); // $120,127.54
+  });
 
-    expect(suma("ivaCentavos")).toBe(TABLA_3_7.trimestreJunAgo!.ivaCentavos);
-    expect(suma("isrCentavos")).toBe(TABLA_3_7.trimestreJunAgo!.isrCentavos);
-    expect(suma("totalImpuestosCentavos")).toBe(TABLA_3_7.trimestreJunAgo!.totalImpuestosCentavos);
+  it("agosto de punta a punta por calcularIsr(): base, tarifa acumulada, y el pago del mes", () => {
+    const r = calcularIsr({
+      ingresosAcumuladosCentavos: 128_664_000n, // $1,286,640.00
+      deduccionesAcumuladasCentavos: 47_430_000n, // $474,300.00
+      pagosProvisionalesAnterioresCentavos: cumJulio, // $162,771.95 — CumPago real a julio, no el ficticio
+      retencionesPersonasMoralesCentavos: RETENCION_PM_ACUMULADA_AGOSTO,
+      mesDelEjercicio: 8,
+      ejercicio: EJERCICIO,
+    });
+
+    expect(r.baseCentavos).toBe(81_234_000n); // $812,340.00 — coincide con el README
+    expect(r.isrAcumuladoCentavos).toBe(19_359_066n); // $193,590.66 — tarifa Anexo 8 ×8 meses
+    expect(r.isrDelPeriodoCentavos).toBe(2_654_371n); // $26,543.71 = tarifa − pagos previos − retención
   });
 });
 
-describe("sección 3.7 del README — agosto, de punta a punta por el motor", () => {
+const TABLA_3_7 = {
+  mayo: { ivaCentavos: 714_000n, isrCentavos: 2_665_021n, totalCentavos: 3_379_021n },
+  junio: { ivaCentavos: 801_000n, isrCentavos: 2_014_171n, totalCentavos: 2_815_171n },
+  julio: { ivaCentavos: 786_000n, isrCentavos: 2_014_170n, totalCentavos: 2_800_170n },
+  agosto: { ivaCentavos: 842_000n, isrCentavos: 2_654_371n, totalCentavos: 3_496_371n },
+  trimestreJunAgo: { ivaCentavos: 2_429_000n, isrCentavos: 6_682_712n, totalCentavos: 9_111_712n },
+  anioEneAgo: { ivaCentavos: 5_784_000n, isrCentavos: 18_931_566n, totalCentavos: 24_715_566n },
+  personalizado1AbrA31Ago: { ivaCentavos: 3_765_000n, isrCentavos: 12_012_754n, totalCentavos: 15_777_754n },
+} as const;
+
+describe("sección 3.7 — invariantes de la tabla corregida", () => {
+  it.each(Object.entries(TABLA_3_7))("%s: iva + isr = total", (_clave, fila) => {
+    expect(fila.ivaCentavos + fila.isrCentavos).toBe(fila.totalCentavos);
+  });
+
+  it("el trimestre jun–ago es la suma exacta de junio + julio + agosto (IVA, ISR y total)", () => {
+    const suma = (campo: "ivaCentavos" | "isrCentavos" | "totalCentavos") =>
+      TABLA_3_7.junio[campo] + TABLA_3_7.julio[campo] + TABLA_3_7.agosto[campo];
+    expect(suma("ivaCentavos")).toBe(TABLA_3_7.trimestreJunAgo.ivaCentavos);
+    expect(suma("isrCentavos")).toBe(TABLA_3_7.trimestreJunAgo.isrCentavos);
+    expect(suma("totalCentavos")).toBe(TABLA_3_7.trimestreJunAgo.totalCentavos);
+  });
+
+  it("los números de IVA no se tocaron — siguen siendo los del fixture original", () => {
+    expect(TABLA_3_7.mayo.ivaCentavos).toBe(714_000n);
+    expect(TABLA_3_7.junio.ivaCentavos).toBe(801_000n);
+    expect(TABLA_3_7.julio.ivaCentavos).toBe(786_000n);
+    expect(TABLA_3_7.agosto.ivaCentavos).toBe(842_000n);
+  });
+});
+
+describe("sección 3.7 — agosto, IVA y cuadre de punta a punta por el motor", () => {
   const AGOSTO_2026: Periodo = { desde: new Date("2026-08-01"), hasta: new Date("2026-08-31") };
 
   it("calcularIva reproduce el IVA de agosto exacto: $8,420.00", () => {
-    // calculoIvaAgosto de handoff/datos/seed.json: trasladado 24,500 − acreditable 11,885 −
-    // retenido 4,195 = 8,420. Aquí se arma un conjunto mínimo de CFDI que suma a esas mismas
-    // cifras — no se leen de la base, packages/core es puro.
     const cfdis: CfdiParaIva[] = [
       {
         direccion: "emitido",
@@ -165,16 +145,10 @@ describe("sección 3.7 del README — agosto, de punta a punta por el motor", ()
         impuestosIva: [{ clasificacion: "trasladado", importeCentavos: 1_188_500n }],
       },
     ];
-
-    const resultado = calcularIva(cfdis, AGOSTO_2026);
-
-    expect(resultado.porPagarCentavos).toBe(TABLA_3_7.agosto!.ivaCentavos);
-    expect(resultado.porPagarCentavos).toBe(842_000n); // $8,420.00 — el número que pide el paso 4
+    expect(calcularIva(cfdis, AGOSTO_2026).porPagarCentavos).toBe(842_000n);
   });
 
   it("evaluarCuadreIva avisa del CFDI cancelado con la cifra corregida de $8,721.00", () => {
-    // §3.4: CFDI 3B77…A20 (Suministros Anáhuac, $2,180) cancelado el 21 de agosto, ya
-    // contabilizado en la póliza D-0142, con $301 de acreditable que sigue sumando.
     const calculado = { trasladadoCentavos: 2_450_000n, acreditableCentavos: 1_188_500n, retenidoCentavos: 419_500n };
     const resultado = evaluarCuadreIva(calculado, { porPagarCentavos: 842_000n }, [
       {
@@ -185,9 +159,8 @@ describe("sección 3.7 del README — agosto, de punta a punta por el motor", ()
         ivaAcreditableCentavos: 30_100n,
       },
     ]);
-
     expect(resultado.estado).toBe("warning");
-    expect(resultado.porPagarCalculadoCentavos).toBe(842_000n); // $8,420 — cuadra en apariencia
-    expect(resultado.porPagarCorregidoCentavos).toBe(872_100n); // $8,721 — la cifra honesta
+    expect(resultado.porPagarCalculadoCentavos).toBe(842_000n);
+    expect(resultado.porPagarCorregidoCentavos).toBe(872_100n);
   });
 });

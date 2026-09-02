@@ -11,32 +11,34 @@ contabilidad/    cuadre.ts (§3.5), poliza.ts (generación + partida doble)
 __tests__/       una prueba por fila de cada tabla del §5, y la regresión de la §3.7
 ```
 
-## ⚠️ El ISR de agosto de la sección 3.7 no es reproducible con la tarifa real de 2026
+## Los números de ISR del fixture eran ficticios — se recalcularon
 
-Esto hay que leerlo antes de confiar en la tabla del README como si fuera la salida esperada de
-`impuestos/isr.ts`.
+La columna ISR de la tabla original de §3.7 (`11,880 / 12,940 / 13,410 / 14,320` para
+mayo–agosto) **nunca salió de aplicar una tarifa real a la base**. Estaba escrita a mano para que
+las pantallas del prototipo se vieran plausibles.
 
-La sección 3.7 dice que agosto da `ISR = 14,320`. Verifiqué la tarifa 2026 real (Anexo 8 de la
-RMF 2026, DOF 28 de diciembre de 2025 — dos fuentes independientes coinciden) y la apliqué a la
-base que el propio README da para agosto (`calculoIsrAgosto` en `handoff/datos/seed.json`:
-ingresos acumulados $1,286,640, deducciones acumuladas $474,300 → base $812,340, que sí coincide
-con la tabla). El resultado real es **ISR del periodo = $75,430.66**, no $14,320.
+Se recalcularon todas con la tarifa 2026 real (Anexo 8 de la RMF, DOF 28-dic-2025) y la fórmula
+completa del artículo 106:
 
-La diferencia es grande (~$61,000) y no es un error de redondeo: los $14,320 del prototipo nunca
-salieron de aplicarle la tarifa 2026 real a esa base. Son una cifra ilustrativa que quien armó el
-prototipo escribió a mano para que la pantalla se viera bien — no hay forma de que ambas cosas
-sean ciertas a la vez.
+```
+ISR del periodo = tarifa_art_96(base acumulada, meses)
+                − pagos provisionales anteriores
+                − ISR retenido 10% por clientes personas morales (acumulado)
+```
 
-**Decisión que tomé:** `impuestos/isr.ts` implementa la fórmula y la tarifa reales, correctamente
-sourceadas y versionadas (`tarifas/2026.json`, con la fuente citada adentro). Las pruebas afirman
-lo que la tarifa real de verdad da, no los $14,320 del fixture — ver el comentario en
-`__tests__/isr.test.ts` y `__tests__/regresion-3-7.test.ts`. El IVA sí reproduce el fixture
-exacto (es aritmética pura sobre cifras dadas, no depende de ninguna tarifa) y es lo que pide la
-verificación de este paso: `pnpm test` verde, agosto en `$8,420` de IVA con el aviso de los `$301`
-del CFDI cancelado — ambos exactos.
+La tercera resta faltaba en la primera versión de §3.2 del README; se corrigió el README, el
+motor tiene razón. `impuestos/isr.ts` recibe la retención como parámetro (`calcularIsr`).
 
-Ship un motor que calcula ISR mal a propósito, solo para que coincida con un dato de maqueta,
-sería exactamente lo que la regla 6 de `ARQUITECTURA.md` advierte que no hay que hacer
-("calcular mal cuesta dinero real al usuario"). Si el criterio correcto fuera otro —por ejemplo,
-que el fixture tiene prioridad y hay que ajustar la tarifa para que reconcilie— es una decisión
-de producto que hay que tomar a propósito, no algo que se cuela en un commit.
+Para agosto: base `$812,340.00` → tarifa ×8 meses `$193,590.66` − pagos previos reales
+`$162,771.95` − retención `$4,275.00` = **`$26,543.71`**. La reconstrucción completa de la tabla,
+con el supuesto para los meses que el fixture no desglosa (reparto por igual del par
+abril/mayo y junio/julio, que no toca ningún invariante), está en
+`__tests__/regresion-3-7.test.ts`.
+
+**Los números de IVA no se tocaron:** son aritmética pura sobre cifras dadas, no dependen de
+ninguna tarifa, y ya cuadraban — agosto `$8,420.00`, con el aviso de los `$301` del CFDI
+cancelado que corrige a `$8,721.00`.
+
+`tarifas/2026.json` versiona la tabla mensual del Anexo 8 con su fuente citada adentro (regla 4
+de `CLAUDE.md`: nunca constantes en código). El día que cambie el ejercicio se agrega
+`tarifas/2027.json`; `calcularIsr` lanza `TarifaNoDisponibleError` si le piden un año sin tabla.

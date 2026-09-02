@@ -34,25 +34,50 @@ describe("aplicarTarifaIsr — tarifa acumulada del artículo 96, tarifas/2026.j
   });
 });
 
-describe("calcularIsr — sección 3.2 del README", () => {
-  it("con los insumos de agosto del fixture (calculoIsrAgosto de handoff/datos/seed.json)", () => {
-    // Base = 1,286,640.00 − 474,300.00 = 812,340.00 (coincide con el fixture del README:
-    // "1,286,640 − 474,300 = 812,340"). El ISR resultante, aplicando la tarifa REAL de 2026,
-    // no coincide con los $14,320 del fixture del prototipo — ver la nota en impuestos/isr.ts
-    // y el hallazgo reportado junto con este paso: esos $14,320 no vienen de la tarifa real de
-    // 2026 aplicada a esta base, así que aquí se afirma la cifra que sí da la tarifa real,
-    // no la del prototipo.
+describe("calcularIsr — sección 3.2 del README (con la resta de retenciones)", () => {
+  it("agosto 2026, insumos reales: tarifa − pagos previos reales − retención del 10%", () => {
+    // Base = 1,286,640.00 − 474,300.00 = 812,340.00 (§3.7 del README).
+    // pagos previos = CumPago real a julio ($162,771.95), NO el $118,160 ficticio del fixture
+    // original — ese número se recalculó junto con la tabla de §3.7. Ver
+    // __tests__/regresion-3-7.test.ts para la reconstrucción completa.
     const resultado = calcularIsr({
       ingresosAcumuladosCentavos: 128_664_000n,
       deduccionesAcumuladasCentavos: 47_430_000n,
-      pagosProvisionalesAnterioresCentavos: 11_816_000n,
+      pagosProvisionalesAnterioresCentavos: 16_277_195n, // $162,771.95
+      retencionesPersonasMoralesCentavos: 427_500n, // $4,275.00 (10% ISR, acumulado a agosto)
       mesDelEjercicio: 8,
       ejercicio: 2026,
     });
 
-    expect(resultado.baseCentavos).toBe(81_234_000n); // $812,340.00 — sí coincide con el README
-    expect(resultado.isrAcumuladoCentavos).toBe(19_359_066n); // $193,590.66, tarifa real ×8 meses
-    expect(resultado.isrDelPeriodoCentavos).toBe(7_543_066n); // $75,430.66
+    expect(resultado.baseCentavos).toBe(81_234_000n); // $812,340.00
+    expect(resultado.isrAcumuladoCentavos).toBe(19_359_066n); // $193,590.66 — tarifa real ×8 meses
+    expect(resultado.isrDelPeriodoCentavos).toBe(2_654_371n); // $26,543.71 — el pago del mes
+  });
+
+  it("la retención es opcional: sin ella, ISR del periodo = tarifa − pagos previos", () => {
+    const base = {
+      ingresosAcumuladosCentavos: 128_664_000n,
+      deduccionesAcumuladasCentavos: 47_430_000n,
+      pagosProvisionalesAnterioresCentavos: 16_277_195n,
+      mesDelEjercicio: 8,
+      ejercicio: 2026,
+    };
+    const sinRetencion = calcularIsr(base);
+    const conRetencion = calcularIsr({ ...base, retencionesPersonasMoralesCentavos: 427_500n });
+    expect(sinRetencion.isrDelPeriodoCentavos - conRetencion.isrDelPeriodoCentavos).toBe(427_500n);
+  });
+
+  it("nunca devuelve un pago negativo: si retenciones + pagos previos superan la tarifa, es 0", () => {
+    const resultado = calcularIsr({
+      ingresosAcumuladosCentavos: 128_664_000n,
+      deduccionesAcumuladasCentavos: 47_430_000n,
+      pagosProvisionalesAnterioresCentavos: 19_000_000n,
+      retencionesPersonasMoralesCentavos: 5_000_000n, // 19M + 5M > tarifa 19.36M
+      mesDelEjercicio: 8,
+      ejercicio: 2026,
+    });
+    expect(resultado.isrAcumuladoCentavos).toBe(19_359_066n);
+    expect(resultado.isrDelPeriodoCentavos).toBe(0n);
   });
 
   it("deducciones mayores a los ingresos dan base y ISR en cero, no negativos", () => {
@@ -74,6 +99,7 @@ describe("calcularIsr — sección 3.2 del README", () => {
       ingresosAcumuladosCentavos: 500_000n,
       deduccionesAcumuladasCentavos: 200_000n,
       pagosProvisionalesAnterioresCentavos: 1_000n,
+      retencionesPersonasMoralesCentavos: 500n,
       mesDelEjercicio: 5,
       ejercicio: 2026,
     };

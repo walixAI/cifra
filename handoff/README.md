@@ -185,13 +185,30 @@ Fixture (August 2026): `24,500 − 11,885 − 4,195 = 8,420`.
 ### 3.2 ISR — pago provisional
 ```
 Base = ingresos acumulados del ejercicio − deducciones autorizadas acumuladas
-ISR del periodo = tarifa_art_113(Base) − pagos provisionales anteriores
+ISR del periodo = tarifa_art_96(Base, meses transcurridos)
+               − pagos provisionales anteriores
+               − ISR retenido por clientes personas morales (10% sobre servicios
+                 profesionales, acumulado del ejercicio)
 ```
-Cumulative from January, not per-month. Fixture: `1,286,640 − 474,300 = 812,340` base;
-tariff applied, minus `118,160` already paid → `14,320`.
+Cumulative from January, not per-month. The 10% withholding line (Art. 106, last paragraph) was
+missing from the first version of this spec — it is part of the provisional payment, not a
+separate annual credit. Never negative: if withholdings plus prior payments exceed the tariff,
+there is no payment (the excess is a favorable balance for the annual return).
 
-The tariff table (LISR art. 96/113) changes yearly and is inflation-indexed — **store it as
-data, versioned by year**, never as constants in code.
+Fixture (August, real 2026 tariff): base `1,286,640 − 474,300 = 812,340`; tariff (Anexo 8,
+elevated ×8 months) = `193,590.66`; minus `162,771.95` in prior provisional payments; minus
+`4,275.00` withheld by legal-entity clients → **`26,543.71`**.
+
+> **Note on the ISR figures below.** The ISR column of the original §3.7 table
+> (`11,880 / 12,940 / 13,410 / 14,320` …) was fictitious — hand-authored so the prototype
+> screens looked plausible, never derived from applying a real tariff to the base the fixture
+> itself specifies. Every ISR figure here was recomputed with the real 2026 tariff (Anexo 8 of
+> the RMF, DOF 28-Dec-2025) and the full Art. 106 formula above. The reconstruction and its
+> assumptions live in `packages/core/__tests__/regresion-3-7.test.ts`. **The IVA figures were not
+> touched** — those already reconciled.
+
+The tariff table (LISR art. 96, applied per art. 106) changes yearly and is inflation-indexed —
+**store it as data, versioned by year**, never as constants in code.
 
 ### 3.3 Multiple income sources
 The fixture taxpayer has *both* actividad empresarial/profesional **and** sueldos y salarios
@@ -237,15 +254,28 @@ Three outcomes, in priority order:
 
 ### 3.7 Fixture coherence (use as seed data + regression tests)
 
+ISR recomputed with the real 2026 tariff (see §3.2 note). IVA unchanged. Amounts in pesos; the
+ISR/total columns carry cents because real tariff arithmetic does — the canonical values are in
+centavos in `datos/seed.json`.
+
 | Periodo | Ingresos | Gastos | Utilidad | IVA | ISR | Total imp. | Margen |
 |---|---|---|---|---|---|---|---|
-| Mayo 2026 | | | | 7,140 | 11,880 | 19,020 | |
-| Junio 2026 | | | | 8,010 | 12,940 | 20,950 | |
-| Julio 2026 | | | | 7,860 | 13,410 | 21,270 | |
-| **Agosto 2026** | 185,420 | 74,280 | 111,140 | 8,420 | 14,320 | 22,740 | 59.9% |
-| Trimestre jun–ago | 512,680 | 221,940 | 290,740 | 24,290 | 40,670 | 64,960 | 56.7% |
-| Año ene–ago | 1,286,640 | 474,300 | 812,340 | 57,840 | 113,360 | 171,200 | 63.1% |
-| 1 abr – 31 ago | 842,910 | 329,180 | 513,730 | 37,650 | 70,770 | 108,420 | 60.9% |
+| Mayo 2026 | | | | 7,140 | 26,650.21 | 33,790.21 | |
+| Junio 2026 | | | | 8,010 | 20,141.71 | 28,151.71 | |
+| Julio 2026 | | | | 7,860 | 20,141.70 | 28,001.70 | |
+| **Agosto 2026** | 185,420 | 74,280 | 111,140 | 8,420 | 26,543.71 | 34,963.71 | 59.9% |
+| Trimestre jun–ago | 512,680 | 221,940 | 290,740 | 24,290 | 66,827.12 | 91,117.12 | 56.7% |
+| Año ene–ago | 1,286,640 | 474,300 | 812,340 | 57,840 | 189,315.66 | 247,155.66 | 63.1% |
+| 1 abr – 31 ago | 842,910 | 329,180 | 513,730 | 37,650 | 120,127.54 | 157,777.54 | 60.9% |
+
+The ISR of each month is the provisional payment for that month = `CumPago(m) − CumPago(m−1)`,
+where `CumPago(m) = tarifa(base acumulada al mes m) − retenciones acumuladas`. The trimestre ISR
+(`66,827.12`) equals junio + julio + agosto by telescoping, and the año ene–ago ISR
+(`189,315.66`) is `CumPago(agosto)` — the whole exercise's provisional ISR through August. The
+fixture does not give monthly utilidad for abril–julio; where it is missing, the pair's utilidad
+is split evenly (abril = mayo, junio = julio). That assumption only moves the individual month
+rows, never an invariant. Full reconstruction in
+`packages/core/__tests__/regresion-3-7.test.ts`.
 
 Invariants that must hold in any period: `ingresos − gastos = utilidad`,
 `utilidad / ingresos = margen`, `iva + isr = total`, and the *trimestre* row is the exact sum of

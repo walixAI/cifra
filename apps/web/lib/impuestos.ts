@@ -25,7 +25,10 @@ export interface DesgloseIsr {
   ingresosAcumuladosCentavos: bigint;
   deduccionesAcumuladasCentavos: bigint;
   baseCentavos: bigint;
+  /** tarifa_art_96(base, meses) — antes de restar nada. */
+  isrAcumuladoCentavos: bigint;
   pagosProvisionalesAnterioresCentavos: bigint;
+  retencionesPersonasMoralesCentavos: bigint;
   isrDelPeriodoCentavos: bigint;
 }
 
@@ -47,10 +50,23 @@ export interface ObligacionImpuestos {
   detalle: string;
 }
 
-export interface RetencionesAFavor {
-  isrPersonasMoralesCentavos: bigint;
-  ivaPersonasMoralesCentavos: bigint;
-  isrPatronCentavos: bigint;
+export interface Retenciones {
+  /**
+   * Ya aplicadas a los pagos de ESTE periodo — no son saldo pendiente. La del ISR reduce el
+   * pago provisional (Art. 106); la del IVA reduce el IVA definitivo (§3.1). Mostrarlas como
+   * "a favor" sería contarlas dos veces.
+   */
+  aplicadasEstePeriodo: {
+    isrPersonasMoralesCentavos: bigint;
+    ivaPersonasMoralesCentavos: bigint;
+  };
+  /**
+   * Genuinamente a favor: la retención del patrón (sueldos y salarios) no toca los pagos de
+   * actividad empresarial — es crédito para la declaración anual.
+   */
+  aFavorParaLaAnual: {
+    isrPatronCentavos: bigint;
+  };
 }
 
 export interface FilaHistorico {
@@ -87,7 +103,7 @@ export type ImpuestosResultado =
       explicacionIsr: string;
       fuentes: string;
       obligaciones: ObligacionImpuestos[];
-      retencionesAFavor: RetencionesAFavor;
+      retenciones: Retenciones;
       historico: FilaHistorico[];
       sat: EstadoSat;
     };
@@ -104,8 +120,17 @@ function etiquetaPeriodo(periodo: string): string {
   return `${capitalizado} ${anioStr}`;
 }
 
+// Fechas de calendario, no instantes: medianoche UTC del día que representan. Ver la nota en
+// page.tsx — si se formatean en hora del centro, la medianoche UTC cae en el día anterior.
 function ultimoDiaDelMes(anio: number, mes1Indexado: number): Date {
-  return new Date(anio, mes1Indexado, 0);
+  return new Date(Date.UTC(anio, mes1Indexado, 0));
+}
+
+/** (diff / base) × 1000, redondeado a entero (mitad hacia arriba) — décimas de punto porcentual. */
+function porcentajeADecima(diffCentavos: bigint, baseCentavos: bigint): bigint {
+  const signo = diffCentavos < 0n ? -1n : 1n;
+  const n = (diffCentavos < 0n ? -diffCentavos : diffCentavos) * 1000n;
+  return signo * ((n + baseCentavos / 2n) / baseCentavos);
 }
 
 /** Vence el mes siguiente al periodo: día `diaLimite`, o el último día si no hay uno. */
@@ -114,7 +139,7 @@ function fechaLimiteMensual(periodo: string, diaLimite: number | null): Date {
   const mesSiguiente = mes === 12 ? 1 : mes + 1;
   const anioSiguiente = mes === 12 ? anio + 1 : anio;
   if (diaLimite === null) return ultimoDiaDelMes(anioSiguiente, mesSiguiente);
-  return new Date(anioSiguiente, mesSiguiente - 1, diaLimite);
+  return new Date(Date.UTC(anioSiguiente, mesSiguiente - 1, diaLimite));
 }
 
 function fechaLimiteObligacion(
@@ -123,7 +148,7 @@ function fechaLimiteObligacion(
 ): Date {
   if (obligacion.periodicidad === "anual") {
     const [anio] = periodo.split("-").map(Number) as [number];
-    return new Date(anio + 1, 3, 30); // 30 de abril del año siguiente
+    return new Date(Date.UTC(anio + 1, 3, 30)); // 30 de abril del año siguiente
   }
   return fechaLimiteMensual(periodo, obligacion.dia_limite);
 }
@@ -212,7 +237,7 @@ export async function obtenerImpuestos(
     const totalAnterior = anterior ? anterior.iva + anterior.isr : null;
     const deltaPorcentaje =
       totalAnterior && totalAnterior !== 0n
-        ? Number(((total - totalAnterior) * 1000n) / totalAnterior) / 10
+        ? Number(porcentajeADecima(total - totalAnterior, totalAnterior)) / 10
         : null;
     return {
       periodo: p,
@@ -250,7 +275,9 @@ export async function obtenerImpuestos(
         ingresosAcumuladosCentavos: 0n,
         deduccionesAcumuladasCentavos: 0n,
         baseCentavos: 0n,
+        isrAcumuladoCentavos: 0n,
         pagosProvisionalesAnterioresCentavos: 0n,
+        retencionesPersonasMoralesCentavos: 0n,
         isrDelPeriodoCentavos: filaHistorico.isr,
       },
       cuadre: {
@@ -267,7 +294,10 @@ export async function obtenerImpuestos(
       obligaciones: obligacionesDb
         .filter((o) => o.vigente_hasta === null || o.vigente_hasta >= new Date())
         .map((o) => obligacionParaRespuesta(o, periodo)),
-      retencionesAFavor: { isrPersonasMoralesCentavos: 0n, ivaPersonasMoralesCentavos: 0n, isrPatronCentavos: 0n },
+      retenciones: {
+        aplicadasEstePeriodo: { isrPersonasMoralesCentavos: 0n, ivaPersonasMoralesCentavos: 0n },
+        aFavorParaLaAnual: { isrPatronCentavos: 0n },
+      },
       historico,
       sat,
     };
@@ -307,6 +337,7 @@ export async function obtenerImpuestos(
     ingresosAcumuladosCentavos: resumen.ingresos_acumulados_centavos,
     deduccionesAcumuladasCentavos: resumen.deducciones_acumuladas_centavos,
     pagosProvisionalesAnterioresCentavos: resumen.isr_pagado_acumulado_centavos,
+    retencionesPersonasMoralesCentavos: resumen.isr_retenido_pm_centavos,
     mesDelEjercicio: Number(mesStr),
     ejercicio: Number(anioStr),
   });
@@ -314,7 +345,9 @@ export async function obtenerImpuestos(
     ingresosAcumuladosCentavos: resumen.ingresos_acumulados_centavos,
     deduccionesAcumuladasCentavos: resumen.deducciones_acumuladas_centavos,
     baseCentavos: resultadoIsr.baseCentavos,
+    isrAcumuladoCentavos: resultadoIsr.isrAcumuladoCentavos,
     pagosProvisionalesAnterioresCentavos: resumen.isr_pagado_acumulado_centavos,
+    retencionesPersonasMoralesCentavos: resumen.isr_retenido_pm_centavos,
     isrDelPeriodoCentavos: resultadoIsr.isrDelPeriodoCentavos,
   };
 
@@ -331,9 +364,11 @@ export async function obtenerImpuestos(
   const explicacionIsr =
     `Para el ISR acumulé ingresos de enero a ${etiquetaPeriodo(periodo).toLowerCase()} ` +
     `(${formatearPesos(isr.ingresosAcumuladosCentavos)}) menos deducciones autorizadas ` +
-    `(${formatearPesos(isr.deduccionesAcumuladasCentavos)}), apliqué la tarifa real del ` +
-    `artículo 96 de 2026 y resté los pagos provisionales anteriores ` +
-    `(${formatearPesos(isr.pagosProvisionalesAnterioresCentavos)}): resultan ` +
+    `(${formatearPesos(isr.deduccionesAcumuladasCentavos)}), apliqué la tarifa del artículo 96 ` +
+    `de 2026: ${formatearPesos(isr.isrAcumuladoCentavos)}. De ahí resté lo que ya pagaste en ` +
+    `provisionales anteriores (${formatearPesos(isr.pagosProvisionalesAnterioresCentavos)}) y ` +
+    `el 10% que te retuvieron tus clientes personas morales ` +
+    `(${formatearPesos(isr.retencionesPersonasMoralesCentavos)}): tu pago de este mes queda en ` +
     `${formatearPesos(isr.isrDelPeriodoCentavos)}.`;
 
   return {
@@ -351,10 +386,14 @@ export async function obtenerImpuestos(
     obligaciones: obligacionesDb
       .filter((o) => o.vigente_hasta === null || o.vigente_hasta >= new Date())
       .map((o) => obligacionParaRespuesta(o, periodo)),
-    retencionesAFavor: {
-      isrPersonasMoralesCentavos: resumen.isr_retenido_pm_centavos,
-      ivaPersonasMoralesCentavos: resumen.iva_retenido_centavos,
-      isrPatronCentavos: resumen.isr_retenido_patron_centavos,
+    retenciones: {
+      aplicadasEstePeriodo: {
+        isrPersonasMoralesCentavos: resumen.isr_retenido_pm_centavos,
+        ivaPersonasMoralesCentavos: resumen.iva_retenido_centavos,
+      },
+      aFavorParaLaAnual: {
+        isrPatronCentavos: resumen.isr_retenido_patron_centavos,
+      },
     },
     historico,
     sat,

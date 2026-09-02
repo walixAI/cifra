@@ -345,19 +345,12 @@ export async function sembrarDatos(prisma) {
   // ── Declaraciones (histórico) ────────────────────────────────────────────────
   console.log("→ Declaraciones…");
 
-  // Los meses ya presentados (mayo–julio) guardan la cifra que se presentó: hecho histórico,
-  // se respeta tal cual del fixture. El mes abierto (agosto, `estimada`) guarda lo que Cifra
-  // ESTIMA hoy — que para el ISR es lo que da la tarifa real de 2026 (impuestos/isr.ts:
-  // $75,430.66), no los $14,320 del fixture, que nunca salieron de aplicar la tarifa real a
-  // la base del propio README. Ver packages/core/README.md. Así la pantalla de Impuestos no se
-  // contradice: el desglose en vivo y la fila del histórico del mes abierto dan lo mismo.
-  const ISR_AGOSTO_TARIFA_REAL = 7_543_066n; // calcularIsr(...) con tarifas/2026.json
-
+  // historicoImpuestos ya trae el ISR de cada mes recalculado con la tarifa real 2026 (ver
+  // _nota_isr en seed.json y §3.7 del README): mayo–julio son lo que se presentó, agosto es la
+  // estimación de Cifra. Se guardan tal cual — la pantalla de Impuestos lee de aquí.
   for (const h of datos.historicoImpuestos) {
-    const esCerrado = h.estado === "presentada";
-    const estado = esCerrado ? "presentada" : "estimada";
+    const estado = h.estado === "presentada" ? "presentada" : "estimada";
     const fecha_limite = new Date(`${h.periodo}-17`);
-    const isrCentavos = esCerrado ? BigInt(h.isr) : ISR_AGOSTO_TARIFA_REAL;
 
     await prisma.declaracion.create({
       data: {
@@ -375,7 +368,7 @@ export async function sembrarDatos(prisma) {
         periodo: h.periodo,
         tipo: "isr_provisional",
         estado,
-        calculo: { del_periodo_centavos: String(isrCentavos) },
+        calculo: { del_periodo_centavos: String(h.isr) },
         fecha_limite,
       },
     });
@@ -393,7 +386,7 @@ export async function sembrarDatos(prisma) {
       ingresos_centavos: BigInt(datos.periodos.mes.ingresos),
       gastos_centavos: BigInt(datos.periodos.mes.gastos),
       iva_centavos: BigInt(datos.periodos.mes.iva), // $8,420 — aritmética pura, coincide con el fixture
-      isr_centavos: ISR_AGOSTO_TARIFA_REAL, // $75,430.66 — tarifa real 2026, ver nota en Declaraciones
+      isr_centavos: BigInt(datos.calculoIsrAgosto.isrDelPeriodo), // $26,543.71 — tarifa real 2026, Art. 106 completo
 
       // Desglose de IVA (calculoIvaAgosto): esto es lo que la vertical de Impuestos (paso 5) le
       // pasa directo a evaluarCuadreIva — no se recalcula sumando el ledger de una muestra de
@@ -402,14 +395,15 @@ export async function sembrarDatos(prisma) {
       iva_acreditable_centavos: BigInt(datos.calculoIvaAgosto.acreditable),
       iva_retenido_centavos: BigInt(datos.calculoIvaAgosto.retenidoPorClientes),
 
-      // Insumos del ISR acumulado (calculoIsrAgosto): sí se le pasan tal cual a
-      // impuestos/isr.ts, que con la tarifa REAL de 2026 da un ISR distinto al de este fixture
-      // — ver packages/core/README.md.
+      // Insumos del ISR acumulado (calculoIsrAgosto): se le pasan tal cual a impuestos/isr.ts.
+      // pagos previos = CumPago real a julio ($162,771.95), no el número ficticio del fixture.
       ingresos_acumulados_centavos: BigInt(datos.calculoIsrAgosto.ingresosAcumulados),
       deducciones_acumuladas_centavos: BigInt(datos.calculoIsrAgosto.deduccionesAcumuladas),
       isr_pagado_acumulado_centavos: BigInt(datos.calculoIsrAgosto.pagosProvisionalesAnteriores),
 
-      isr_retenido_pm_centavos: BigInt(datos.retencionesAFavor.isrPorPersonasMorales),
+      // Retención del 10% que ya reduce el pago provisional (línea 6 de §3.2). NO es saldo a
+      // favor — la pantalla la muestra como "ya aplicada", no como pendiente.
+      isr_retenido_pm_centavos: BigInt(datos.calculoIsrAgosto.retencionesPersonasMorales),
       isr_retenido_patron_centavos: BigInt(datos.retencionesAFavor.isrPorPatron),
 
       cfdi_sin_clasificar: cfdiSinClasificar,

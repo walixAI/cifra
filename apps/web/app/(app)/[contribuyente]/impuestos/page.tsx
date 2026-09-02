@@ -16,7 +16,7 @@ import {
   type FilaHistorico,
   type ImpuestosResultado,
   type ObligacionImpuestos,
-  type RetencionesAFavor,
+  type Retenciones,
 } from "@/lib/impuestos";
 import { ExplicacionIA } from "./explicacion-ia";
 
@@ -222,11 +222,16 @@ function Contenido({ slug, r }: { slug: string; r: Extract<ImpuestosResultado, {
             <DesgloseCard
               icono="ph-scales"
               titulo="ISR · pago provisional"
-              filas={[
-                [`Ingresos ene–${mesCorto(r.periodo)}`, r.isr.ingresosAcumuladosCentavos, false],
-                ["Deducciones", r.isr.deduccionesAcumuladasCentavos, true],
-                ["Base estimada", r.isr.baseCentavos, false],
-              ]}
+              filas={
+                r.isr.isrAcumuladoCentavos > 0n
+                  ? [
+                      [`Base gravable ene–${mesCorto(r.periodo)}`, r.isr.baseCentavos, false],
+                      ["ISR de la tarifa (art. 96)", r.isr.isrAcumuladoCentavos, false],
+                      ["Pagos provisionales previos", r.isr.pagosProvisionalesAnterioresCentavos, true],
+                      ["Retenido 10% por clientes", r.isr.retencionesPersonasMoralesCentavos, true],
+                    ]
+                  : [["Presentado", r.isr.isrDelPeriodoCentavos, false]]
+              }
               total={["ISR del periodo", r.isr.isrDelPeriodoCentavos]}
             />
           </div>
@@ -298,7 +303,7 @@ function Contenido({ slug, r }: { slug: string; r: Extract<ImpuestosResultado, {
 
       <div className="flex flex-col gap-3.5">
         <Obligaciones obligaciones={r.obligaciones} slug={slug} />
-        <Retenciones r={r.retencionesAFavor} />
+        <Retenciones r={r.retenciones} />
       </div>
     </div>
   );
@@ -455,7 +460,11 @@ function Obligaciones({
   );
 }
 
-function Retenciones({ r }: { r: RetencionesAFavor }) {
+function Retenciones({ r }: { r: Retenciones }) {
+  const { aplicadasEstePeriodo: aplicadas, aFavorParaLaAnual: aFavor } = r;
+  const hayAplicadas =
+    aplicadas.isrPersonasMoralesCentavos > 0n || aplicadas.ivaPersonasMoralesCentavos > 0n;
+
   return (
     <div
       className="rounded-2xl border p-4.5"
@@ -463,29 +472,46 @@ function Retenciones({ r }: { r: RetencionesAFavor }) {
     >
       <div className="flex items-center gap-2 text-[15px] font-semibold">
         <i className="ph-duotone ph-arrow-u-down-left" aria-hidden style={{ fontSize: 17, color: "var(--accent-2)" }} />
-        Retenciones a tu favor
+        Retenciones
       </div>
-      <div className="mt-3 text-[13px]">
-        <div className="flex justify-between border-b py-2" style={{ borderColor: "var(--line2)" }}>
-          <span style={{ color: "var(--muted)" }}>ISR retenido por personas morales</span>
-          <span className="num">{formatearPesosRedondo(r.isrPersonasMoralesCentavos)}</span>
-        </div>
-        <div className="flex justify-between border-b py-2" style={{ borderColor: "var(--line2)" }}>
-          <span style={{ color: "var(--muted)" }}>IVA retenido por personas morales</span>
-          <span className="num">{formatearPesosRedondo(r.ivaPersonasMoralesCentavos)}</span>
-        </div>
+
+      {hayAplicadas && (
+        <>
+          <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>
+            Ya aplicadas a tu pago de este periodo
+          </div>
+          <div className="mt-1.5 text-[13px]">
+            <div className="flex justify-between border-b py-2" style={{ borderColor: "var(--line2)" }}>
+              <span style={{ color: "var(--muted)" }}>ISR retenido por personas morales</span>
+              <span className="num">−{formatearPesosRedondo(aplicadas.isrPersonasMoralesCentavos)}</span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span style={{ color: "var(--muted)" }}>IVA retenido por personas morales</span>
+              <span className="num">−{formatearPesosRedondo(aplicadas.ivaPersonasMoralesCentavos)}</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--faint)" }}>
+        A favor para tu declaración anual
+      </div>
+      <div className="mt-1.5 text-[13px]">
         <div className="flex justify-between py-2">
           <span style={{ color: "var(--muted)" }}>ISR retenido por tu patrón</span>
-          <span className="num">{formatearPesosRedondo(r.isrPatronCentavos)}</span>
+          <span className="num">{formatearPesosRedondo(aFavor.isrPatronCentavos)}</span>
         </div>
       </div>
+
       <div
         className="mt-3 flex gap-2.5 rounded-xl px-3.5 py-3"
         style={{ background: "var(--ia-bg)", border: "1px solid var(--ia-line)" }}
       >
         <i className="ph-duotone ph-sparkle" aria-hidden style={{ fontSize: 16, marginTop: 1, color: "var(--ia)" }} />
         <div className="text-[13px] leading-relaxed" style={{ color: "var(--muted)" }}>
-          Tienes dos fuentes de ingreso. En abril se declaran juntas, con lo acumulado hasta hoy.
+          Lo que te retienen tus clientes personas morales ya baja tu pago de este mes. Solo lo
+          que te retuvo tu patrón queda a favor para abril, cuando se juntan tus dos fuentes de
+          ingreso.
         </div>
       </div>
     </div>
@@ -493,18 +519,24 @@ function Retenciones({ r }: { r: RetencionesAFavor }) {
 }
 
 // ── Formato de fechas — la única prosa de calendario que necesita esta pantalla ──
+//
+// Las fechas límite son fechas de calendario (el "17 de septiembre"), no instantes: se guardan
+// y se calculan como medianoche UTC del día que representan, y se formatean en UTC — si se
+// formatean en hora del centro, la medianoche UTC cae en el día anterior y se muestra el 16.
+// Las horas del SAT (último intento, corte) sí son instantes reales: esas van en hora del centro.
 
 function formatearFecha(fecha: Date): string {
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Mexico_City" }).format(fecha);
+  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(fecha);
 }
 function formatearFechaCorta(fecha: Date): string {
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }).format(fecha).replace(".", "");
+  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" }).format(fecha).replace(".", "");
 }
 function formatearHora(fecha: Date): string {
   return new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Mexico_City" }).format(fecha);
 }
 function formatearFechaHora(fecha: Date): string {
-  return `${formatearFechaCorta(fecha)} a las ${formatearHora(fecha)}`;
+  const dia = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }).format(fecha).replace(".", "");
+  return `${dia} a las ${formatearHora(fecha)}`;
 }
 function mesCorto(periodo: string): string {
   const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];

@@ -1,5 +1,6 @@
 {
-  "_nota": "Datos semilla de Cifra. Las mismas cifras del prototipo, cruzadas entre módulos a propósito. Dinero en CENTAVOS enteros. Los invariantes de periodos son la suite de regresión del motor fiscal: ingresos − gastos = utilidad, iva + isr = total, y el trimestre es la suma exacta de sus tres meses.",
+  "_nota": "Datos semilla de Cifra. Dinero en CENTAVOS enteros. Los invariantes de periodos son la suite de regresión del motor fiscal: ingresos − gastos = utilidad, iva + isr = total, y el trimestre es la suma exacta de sus tres meses.",
+  "_nota_isr": "Las cifras de ISR del prototipo original eran ficticias (nunca salieron de aplicar una tarifa real a la base). Se recalcularon todas con la tarifa 2026 real (Anexo 8) y la fórmula completa del Art. 106: tarifa acumulada − pagos provisionales anteriores − ISR retenido 10% por personas morales. Las de IVA no se tocaron. Reconstrucción en packages/core/__tests__/regresion-3-7.test.ts y §3.2/§3.7 del README.",
 
   "contribuyente": {
     "rfc": "TODA7606258I7",
@@ -29,7 +30,7 @@
     "mes": {
       "etiqueta": "Agosto 2026", "vs": "vs julio",
       "ingresos": 18542000, "gastos": 7428000, "utilidad": 11114000,
-      "iva": 842000, "isr": 1432000, "impuestos": 2274000,
+      "iva": 842000, "isr": 2654371, "impuestos": 3496371,
       "deltaIngresos": 12.4, "deltaGastos": -4.8, "margen": 59.9,
       "porCobrar": 4820000, "cfdiProcesados": 238, "cfdiPorRevisar": 8,
       "prosa": "Vas en buen camino. Facturaste 12.4% más que en julio y tus gastos bajaron 4.8%."
@@ -37,7 +38,7 @@
     "trimestre": {
       "etiqueta": "Junio–agosto 2026", "vs": "vs trimestre previo",
       "ingresos": 51268000, "gastos": 22194000, "utilidad": 29074000,
-      "iva": 2429000, "isr": 4067000, "impuestos": 6496000,
+      "iva": 2429000, "isr": 6682712, "impuestos": 9111712,
       "deltaIngresos": 8.1, "deltaGastos": 2.6, "margen": 56.7,
       "porCobrar": 8924000, "cfdiProcesados": 694, "cfdiPorRevisar": 21,
       "prosa": "Buen trimestre: facturaste 8.1% más que el anterior, aunque tus gastos subieron 2.6%."
@@ -45,7 +46,7 @@
     "anio": {
       "etiqueta": "Enero–agosto 2026", "vs": "vs 2025 a la fecha",
       "ingresos": 128664000, "gastos": 47430000, "utilidad": 81234000,
-      "iva": 5784000, "isr": 11336000, "impuestos": 17120000,
+      "iva": 5784000, "isr": 18931566, "impuestos": 24715566,
       "deltaIngresos": 15.2, "deltaGastos": 6.9, "margen": 63.1,
       "porCobrar": 13250000, "cfdiProcesados": 2604, "cfdiPorRevisar": 38,
       "prosa": "Tu mejor año hasta ahora: 15.2% más facturado que en 2025, con gastos 6.9% arriba."
@@ -53,7 +54,7 @@
     "personalizado": {
       "etiqueta": "1 abr – 31 ago 2026", "vs": "vs mismo lapso de 2025",
       "ingresos": 84291000, "gastos": 32918000, "utilidad": 51373000,
-      "iva": 3765000, "isr": 7077000, "impuestos": 10842000,
+      "iva": 3765000, "isr": 12012754, "impuestos": 15777754,
       "deltaIngresos": 11.0, "deltaGastos": 5.2, "margen": 60.9,
       "porCobrar": 9760000, "cfdiProcesados": 1638, "cfdiPorRevisar": 26,
       "prosa": "En estos cinco meses facturaste 11.0% más que en 2025 y gastaste 5.2% más."
@@ -61,10 +62,10 @@
   },
 
   "historicoImpuestos": [
-    { "periodo": "2026-05", "iva": 714000, "isr": 1188000, "total": 1902000, "estado": "presentada", "deltaVsPrevio": null },
-    { "periodo": "2026-06", "iva": 801000, "isr": 1294000, "total": 2095000, "estado": "presentada", "deltaVsPrevio": 10.1 },
-    { "periodo": "2026-07", "iva": 786000, "isr": 1341000, "total": 2127000, "estado": "presentada", "deltaVsPrevio": 1.5 },
-    { "periodo": "2026-08", "iva": 842000, "isr": 1432000, "total": 2274000, "estado": "estimada", "deltaVsPrevio": 6.9 }
+    { "periodo": "2026-05", "iva": 714000, "isr": 2665021, "total": 3379021, "estado": "presentada", "deltaVsPrevio": null },
+    { "periodo": "2026-06", "iva": 801000, "isr": 2014171, "total": 2815171, "estado": "presentada", "deltaVsPrevio": -16.7 },
+    { "periodo": "2026-07", "iva": 786000, "isr": 2014170, "total": 2800170, "estado": "presentada", "deltaVsPrevio": -0.5 },
+    { "periodo": "2026-08", "iva": 842000, "isr": 2654371, "total": 3496371, "estado": "estimada", "deltaVsPrevio": 24.9 }
   ],
 
   "calculoIvaAgosto": {
@@ -82,16 +83,19 @@
     "ingresosAcumulados": 128664000,
     "deduccionesAcumuladas": 47430000,
     "baseEstimada": 81234000,
-    "pagosProvisionalesAnteriores": 11816000,
-    "isrDelPeriodo": 1432000,
-    "fechaLimite": "2026-09-17"
+    "isrAcumuladoTarifa": 19359066,
+    "pagosProvisionalesAnteriores": 16277195,
+    "retencionesPersonasMorales": 427500,
+    "isrDelPeriodo": 2654371,
+    "fechaLimite": "2026-09-17",
+    "_nota": "tarifa(base, 8 meses) 19,359,066 − pagos previos 16,277,195 − retención 10% 427,500 = 2,654,371. Ver §3.2 del README."
   },
 
   "retencionesAFavor": {
     "isrPorPersonasMorales": 427500,
     "ivaPorPersonasMorales": 419500,
     "isrPorPatron": 386000,
-    "_nota": "Dos fuentes de ingreso; en abril se declaran juntas. La anual apunta a saldo a favor cercano a 900000."
+    "_nota": "isrPorPersonasMorales e ivaPorPersonasMorales NO son saldo pendiente: ya reducen el pago provisional de ISR y el pago de IVA de este periodo. Solo isrPorPatron (sueldos y salarios) queda a favor para la declaración anual."
   },
 
   "cuentasContables": [
@@ -193,7 +197,7 @@
 
   "notificaciones": [
     { "severidad": "neg", "texto": "El CFDI de Suministros Anáhuac fue cancelado en el SAT y su póliza D-0142 sigue acreditando $301 de IVA.", "pantallaDestino": "contabilidad" },
-    { "severidad": "warn", "texto": "Faltan 18 días para presentar IVA e ISR de agosto: $22,740 estimados.", "pantallaDestino": "impuestos" },
+    { "severidad": "warn", "texto": "Faltan 18 días para presentar IVA e ISR de agosto: $34,964 estimados.", "pantallaDestino": "impuestos" },
     { "severidad": "ia", "texto": "Clasifiqué 14 gastos nuevos. 8 necesitan que confirmes la cuenta.", "pantallaDestino": "gastos" },
     { "severidad": "pos", "texto": "Se conciliaron 12 movimientos de BBVA automáticamente.", "pantallaDestino": "bancos" },
     { "severidad": "warn", "texto": "La factura A-1041 de Grupo Médico Anáhuac lleva 34 días vencida ($58,400).", "pantallaDestino": "ingresos" }
