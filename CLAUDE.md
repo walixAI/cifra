@@ -160,5 +160,7 @@ regresión del motor fiscal.
   migración, no como paso manual.
 - Todo cálculo fiscal nuevo llega con su prueba en `packages/core/__tests__`.
 - Dinero en **centavos, entero** (`bigint`), nunca `float`. Se formatea en la orilla.
-- Fechas con zona: el SAT opera en hora del centro de México.
+- **Fechas límite y de calendario son días, no instantes**: se guardan y se formatean en UTC
+  (medianoche del día que representan). Solo las marcas de tiempo con hora —respuestas del SAT,
+  timbrados, `Bitacora`— van en hora del centro de México, que es donde opera el SAT.
 - El cliente del SAT solo se llama desde `apps/trabajos`, nunca desde `apps/web`.
