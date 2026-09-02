@@ -7,18 +7,19 @@ catalog:
   typescript: ^5.7.3
   "@types/node": ^22.10.5
 
-# Paquetes con postinstall que sí necesitamos: Prisma descarga sus engines,
-# embedded-postgres descarga el binario de Postgres para las pruebas de packages/db (uno por
-# plataforma — el de linux-x64 es el que corre en CI).
-onlyBuiltDependencies:
-  - "@tailwindcss/oxide"
-  - sharp
-  - esbuild
-  - "@embedded-postgres/windows-x64"
-  - "@embedded-postgres/linux-x64"
-  - "@embedded-postgres/linux-arm64"
-  - "@embedded-postgres/darwin-x64"
-  - "@embedded-postgres/darwin-arm64"
-  - "@prisma/client"
-  - "@prisma/engines"
-  - prisma
+# Postinstall que sí queremos que corran (pnpm 11 los bloquea por defecto): Prisma baja sus
+# engines, embedded-postgres baja el binario de Postgres para las pruebas de packages/db (uno
+# por plataforma — linux-x64 es el de CI), y los nativos del build de apps/web.
+allowBuilds:
+  "@tailwindcss/oxide": true
+  sharp: true
+  esbuild: true
+  "@embedded-postgres/windows-x64": true
+  "@embedded-postgres/linux-x64": true
+  "@embedded-postgres/linux-arm64": true
+  "@embedded-postgres/darwin-x64": true
+  "@embedded-postgres/darwin-arm64": true
+  "@prisma/client": true
+  "@prisma/engines": true
+  prisma: true
+  "unrs-resolver": true
