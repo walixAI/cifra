@@ -6,5 +6,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "__tests__/**/*", "*.config.ts"]
+  "include": ["src/**/*", "test/**/*", "*.config.ts"]
 }

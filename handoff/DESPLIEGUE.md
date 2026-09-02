@@ -16,7 +16,7 @@ Paso 6 de `PRIMEROS-PASOS.md`.
 | Job | Qué corre |
 |---|---|
 | `estatico-y-motor` | `pnpm typecheck` · `pnpm lint` · `pnpm build` · pruebas de `packages/core` |
-| `aislamiento` | la prueba de aislamiento entre organizaciones del paso 2 (`packages/db`, Postgres embebido) |
+| `aislamiento` | la prueba de aislamiento entre organizaciones del paso 2 (`packages/db`, Postgres embebido) y las de `apps/trabajos` del paso 7 (SAT falso, candado por RFC, barrido de validez §3.4) |
 
 ### Bloquear el merge si CI falla — necesita GitHub Pro (o repo público)
 
@@ -33,7 +33,7 @@ public"`. Hay dos caminos:
       "strict": true,
       "checks": [
         { "context": "typecheck · lint · build · pruebas del motor" },
-        { "context": "prueba de aislamiento (RLS)" }
+        { "context": "aislamiento (RLS) · trabajos del SAT" }
       ]
     },
     "enforce_admins": false,
@@ -109,7 +109,51 @@ automático del botón de merge.
 
 ---
 
-## 4 · Verificación
+## 4 · Inngest y el worker de trabajos (`apps/trabajos`)
+
+`apps/trabajos` es un servicio aparte de `apps/web`: un servidor Hono que expone las funciones
+de Inngest en `/api/inngest` y nada más. Corre los tres trabajos del SAT (`sat-sincronizar`
+cada 6 h, `sat-validez` diario, `sat-constancia` semanal), cada uno como cron → abanico →
+función por contribuyente, con la concurrencia limitada a 1 por RFC.
+
+**Es el único proceso que descifra la CIEC y habla con el SAT.** `apps/web` nunca lo hace
+(regla de `CLAUDE.md`). Por eso `CREDENCIALES_LLAVE_MAESTRA` y las llaves de Inngest viven
+aquí, no en el web.
+
+### 4.1 · Inngest Cloud (una vez)
+
+1. Crea la app en [app.inngest.com](https://app.inngest.com). El `id` del cliente es
+   `cifra-trabajos` (ver `apps/trabajos/src/inngest/cliente.ts`).
+2. De **Settings → Keys** copia:
+   - **Event Key** → `INNGEST_EVENT_KEY`
+   - **Signing Key** → `INNGEST_SIGNING_KEY`
+3. Cuando el worker esté desplegado, en **Apps → Sync** apunta a
+   `https://<host-del-worker>/api/inngest`. Inngest lee las funciones y programa los crones
+   solo — no hay que crear los schedules a mano.
+
+### 4.2 · Dónde corre el worker
+
+No en Vercel (los crones de Inngest necesitan un endpoint estable y el worker no es
+serverless-friendly con el Postgres bajo RLS). Opciones:
+
+- **Railway / Render / Fly**: un servicio Node, comando `pnpm --filter @cifra/trabajos start`
+  (levanta `tsx src/servidor.ts` en el puerto `PUERTO_TRABAJOS`, default 3100). Raíz del repo,
+  no `apps/trabajos` — pnpm necesita el workspace completo.
+- Variables que necesita: `DATABASE_URL` / `DIRECT_URL` (la cadena de `cifra_app`, la misma
+  con RLS que usa el web — el worker se conecta con ese rol a propósito), `SAT_MODO`
+  (`falso` hasta tener acceso real al SAT), `CREDENCIALES_LLAVE_MAESTRA` (la **misma** que el
+  web: el web cifra la CIEC al guardarla, el worker la descifra), `INNGEST_EVENT_KEY`,
+  `INNGEST_SIGNING_KEY`, `TZ=America/Mexico_City`.
+
+### 4.3 · Migraciones
+
+El worker usa el mismo esquema que el web. El paso 7 no agrega migraciones: `sincronizacion_rfc`
+(con los campos del candado) y `sincronizacion_sat` ya venían en la migración `plataforma` del
+paso 2. `prisma migrate deploy` de §2 es todo lo que hace falta.
+
+---
+
+## 5 · Verificación
 
 Abre un PR de prueba (`git checkout -b prueba-despliegue`, un cambio trivial, `gh pr create`).
 Debe aparecer:

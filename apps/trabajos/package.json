@@ -1,0 +1,27 @@
+{
+  "name": "@cifra/trabajos",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/servidor.ts",
+    "start": "tsx src/servidor.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cifra/core": "workspace:*",
+    "@cifra/db": "workspace:*",
+    "@cifra/sat": "workspace:*",
+    "@hono/node-server": "^2.1.1",
+    "hono": "^4.13.5",
+    "inngest": "^4.18.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "^4.23.13",
+    "typescript": "catalog:",
+    "vitest": "4.1.11"
+  }
+}

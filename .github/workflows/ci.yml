@@ -1,8 +1,10 @@
 name: CI
 
 # Compuerta de merge. El paso 6 de PRIMEROS-PASOS.md: typecheck, lint, las pruebas de
-# packages/core y la prueba de aislamiento del paso 2. Ningún PR se mezcla si algo falla —
-# eso se hace exigiendo estos checks en la protección de rama de `main` (ver handoff/DESPLIEGUE.md).
+# packages/core y la prueba de aislamiento del paso 2. El paso 7 suma las pruebas de
+# apps/trabajos (SAT falso, candado por RFC, barrido de validez), que también levantan
+# Postgres embebido. Ningún PR se mezcla si algo falla — eso se hace exigiendo estos checks
+# en la protección de rama de `main` (ver handoff/DESPLIEGUE.md).
 
 on:
   pull_request:
@@ -52,9 +54,9 @@ jobs:
       - name: Pruebas de packages/core (motor fiscal)
         run: pnpm test:core
 
-  # ── Compuerta 2: aislamiento entre inquilinos (paso 2) ─────────────────────
+  # ── Compuerta 2: aislamiento (paso 2) + trabajos del SAT (paso 7) ──────────
   aislamiento:
-    name: prueba de aislamiento (RLS)
+    name: aislamiento (RLS) · trabajos del SAT
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -74,3 +76,6 @@ jobs:
 
       - name: Prueba de aislamiento entre organizaciones
         run: pnpm test:aislamiento
+
+      - name: Pruebas de apps/trabajos (SAT falso, candado por RFC, §3.4)
+        run: pnpm --filter @cifra/trabajos test

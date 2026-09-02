@@ -9,7 +9,7 @@ catalog:
 
 # Postinstall que sí queremos que corran (pnpm 11 los bloquea por defecto): Prisma baja sus
 # engines, embedded-postgres baja el binario de Postgres para las pruebas de packages/db (uno
-# por plataforma — linux-x64 es el de CI), y los nativos del build de apps/web.
+# por plataforma — linux-x64 es el de CI), y los nativos del build de apps/web y de Inngest.
 allowBuilds:
   "@tailwindcss/oxide": true
   sharp: true
@@ -23,3 +23,4 @@ allowBuilds:
   "@prisma/engines": true
   prisma: true
   "unrs-resolver": true
+  protobufjs: true

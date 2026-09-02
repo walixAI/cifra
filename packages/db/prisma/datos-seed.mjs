@@ -6,7 +6,7 @@
 // los emitidos, fecha/cuenta de tres movimientos bancarios), se dice explícitamente en el
 // comentario junto al valor — nada se inventa en silencio.
 
-import { randomUUID } from "node:crypto";
+import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,32 @@ const datos = JSON.parse(readFileSync(join(raizRepo, "handoff", "datos", "seed.j
 
 const AÑO_MS = 365 * 24 * 60 * 60 * 1000;
 const SEMANA_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Llave maestra de desarrollo para el cifrado de sobre de la CIEC. En producción viene del
+// entorno (CREDENCIALES_LLAVE_MAESTRA, y luego KMS). El formato de cada blob —iv‖tag‖ct con
+// AES-256-GCM— tiene que coincidir con apps/trabajos/src/credenciales.ts, que es donde se
+// descifra dentro del worker.
+const LLAVE_MAESTRA_DEV = "xksp1Ohnd4B+mmu0Udjl7bNe2setcLZwDqMdJIBYUz8=";
+
+function cifrarBlob(llave, textoPlano) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", llave, iv);
+  const cuerpo = Buffer.concat([cipher.update(textoPlano), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), cuerpo]);
+}
+
+/** Devuelve { material_cifrado, llave_datos_cifrada } para guardar en CredencialFiscal. */
+function cifrarCiec(ciecEnClaro) {
+  const maestra = Buffer.from(
+    process.env.CREDENCIALES_LLAVE_MAESTRA ?? LLAVE_MAESTRA_DEV,
+    "base64",
+  );
+  const llaveDatos = randomBytes(32);
+  return {
+    material_cifrado: cifrarBlob(llaveDatos, Buffer.from(ciecEnClaro, "utf-8")),
+    llave_datos_cifrada: cifrarBlob(maestra, llaveDatos),
+  };
+}
 
 export async function sembrarDatos(prisma) {
   // ── Organización personal + TODA7606258I7 ──────────────────────────────────
@@ -65,6 +91,28 @@ export async function sembrarDatos(prisma) {
       contribuyente_id: toda.id,
       leida_en: new Date(datos.constancia.leidaEn),
       regimenes: datos.constancia.regimenes,
+    },
+  });
+
+  // CIEC cifrada con sobre. El valor en claro es de mentira; lo que importa es que
+  // apps/trabajos pueda descifrarlo dentro del worker. La organización personal tiene
+  // autorización `lectura_sat` (bajar CFDI, validar, leer constancia), otorgada por el
+  // propietario_fiscal.
+  console.log("→ CIEC + autorización de la organización personal…");
+  await prisma.credencialFiscal.create({
+    data: {
+      contribuyente_id: toda.id,
+      tipo: "ciec",
+      ...cifrarCiec("CIEC-DE-PRUEBA-TODA760625"),
+      huella: "••••25",
+    },
+  });
+  await prisma.autorizacionCredencial.create({
+    data: {
+      contribuyente_id: toda.id,
+      organizacion_id: orgPersonal.id,
+      alcance: "lectura_sat",
+      otorgada_por: jose.id,
     },
   });
 
@@ -473,6 +521,18 @@ export async function sembrarDatos(prisma) {
       rol: "contador",
       estado: "activo",
       expira_en: new Date(Date.now() + AÑO_MS),
+    },
+  });
+
+  // El despacho también tiene autorización `lectura_sat` sobre la CIEC de TODA (el propietario
+  // fiscal se la otorgó al contratar). Con esto, dos organizaciones pueden pedir sincronizar el
+  // MISMO RFC — y el candado de SincronizacionRfc es lo que impide que lo hagan en paralelo.
+  await prisma.autorizacionCredencial.create({
+    data: {
+      contribuyente_id: toda.id,
+      organizacion_id: orgDespacho.id,
+      alcance: "lectura_sat",
+      otorgada_por: jose.id, // solo el propietario_fiscal puede otorgarla
     },
   });
 
