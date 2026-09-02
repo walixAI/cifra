@@ -151,6 +151,21 @@ El worker usa el mismo esquema que el web. El paso 7 no agrega migraciones: `sin
 (con los campos del candado) y `sincronizacion_sat` ya venían en la migración `plataforma` del
 paso 2. `prisma migrate deploy` de §2 es todo lo que hace falta.
 
+### 4.4 · Fronteras
+
+- `apps/trabajos` es un **despliegue separado** de `apps/web` y el **único lugar donde se
+  descifra la CIEC**.
+- **No se importa nada de `apps/web` en `apps/trabajos`, ni al revés.** Lo que compartan vive
+  en un `packages/*` (`core`, `db`, `sat`, `cfdi`).
+- **El cliente del SAT (`packages/sat`) no se exporta hacia `apps/web` en ninguna forma** —
+  `apps/web` no lo lista como dependencia y no lo importa ni transitivamente.
+- Todavía **no hay UI para capturar la CIEC**, así que el cliente falso **no la exige**. El
+  punto de descifrado (`usarCiec` en `apps/trabajos/src/credenciales.ts`) ya está escrito con
+  su forma final —autorización verificada contra `AutorizacionCredencial`, descifrado de
+  sobre, renglón en `Bitácora`— pero tolera que aún no exista `CredencialFiscal` y entrega una
+  CIEC vacía. Un `TODO` en ese archivo apunta a la §7 del documento de inquilinos: cuando
+  exista la captura, la ausencia de credencial vuelve a ser un error duro.
+
 ---
 
 ## 5 · Verificación

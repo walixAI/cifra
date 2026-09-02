@@ -72,6 +72,8 @@ export class ClienteSatFalso implements ClienteSat {
     this.cancelados.add(uuid);
   }
 
+  // Solo mira `credencial.rfc`. La CIEC no se usa (ni hace falta que venga): el seed no tiene
+  // secretos y todavía no hay UI para capturarla — §7 del documento de inquilinos.
   private async preludio(credencial: CredencialSat): Promise<void> {
     if (this.latenciaMs > 0) await dormir(this.latenciaMs);
     if (this.fallarCon !== undefined) {

@@ -9,7 +9,9 @@ export type EstadoCfdiSat = "vigente" | "cancelado" | "no_encontrado";
 
 export interface CredencialSat {
   rfc: string;
-  /** CIEC en claro. Vive en memoria del worker el tiempo de la llamada y nada más. */
+  /** CIEC en claro. Vive en memoria del worker el tiempo de la llamada y nada más. Mientras no
+   *  haya UI para capturarla (§7 del documento de inquilinos) llega `""`; el cliente falso no
+   *  la usa y el real todavía no existe. */
   ciec: string;
 }
 

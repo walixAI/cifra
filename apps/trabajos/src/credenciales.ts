@@ -68,6 +68,11 @@ export class CredencialNoAutorizada extends Error {
   }
 }
 
+/**
+ * Todavía sin uso: mientras no exista la UI para capturar la CIEC (§7 del documento de
+ * inquilinos), `usarCiec` tolera que no haya `CredencialFiscal` y entrega una CIEC vacía. En
+ * cuanto exista la captura, la ausencia de credencial vuelve a lanzar esto.
+ */
 export class CredencialNoRegistrada extends Error {
   constructor(contribuyenteId: string) {
     super(`El contribuyente ${contribuyenteId} no tiene CIEC registrada.`);
@@ -91,7 +96,9 @@ export interface ContextoUsoCiec {
 
 /**
  * Descifra la CIEC del contribuyente, la entrega a `fn` para una operación concreta, y deja
- * rastro en Bitacora. La CIEC en claro solo vive dentro de `fn`.
+ * rastro en Bitacora. La CIEC en claro solo vive dentro de `fn`. Sin `AutorizacionCredencial`
+ * vigente no se descifra nada. Mientras no exista la UI para capturarla, si no hay
+ * `CredencialFiscal` se entrega `""` (ver el TODO §7 abajo), no un error.
  *
  * `db` es el cliente CON alcance del contribuyente (prismaPara). CredencialFiscal y
  * AutorizacionCredencial llevan contribuyente_id no nulo y están bajo RLS: hay que leerlas con
@@ -118,14 +125,19 @@ export async function usarCiec<T>(
   const credencial = await db.credencialFiscal.findUnique({
     where: { contribuyente_id_tipo: { contribuyente_id: contexto.contribuyenteId, tipo: "ciec" } },
   });
-  if (!credencial) {
-    throw new CredencialNoRegistrada(contexto.contribuyenteId);
-  }
 
-  const ciec = descifrarSobre({
-    materialCifrado: Buffer.from(credencial.material_cifrado),
-    llaveDatosCifrada: Buffer.from(credencial.llave_datos_cifrada),
-  });
+  // TODO(§7 del documento de inquilinos — "CIEC y e.firma"): mientras no exista la UI para
+  // capturar la CIEC, este punto tolera que no haya `CredencialFiscal` y entrega una CIEC
+  // vacía. El cliente falso del SAT no la usa, así que el seam queda escrito con su forma
+  // final —autorización verificada arriba, descifrado de sobre, renglón en Bitácora— pero sin
+  // credencial real. En cuanto exista la captura, esto vuelve a ser un error duro:
+  //   if (!credencial) throw new CredencialNoRegistrada(contexto.contribuyenteId);
+  const ciec = credencial
+    ? descifrarSobre({
+        materialCifrado: Buffer.from(credencial.material_cifrado),
+        llaveDatosCifrada: Buffer.from(credencial.llave_datos_cifrada),
+      })
+    : "";
 
   await db.bitacora.create({
     data: {
@@ -134,9 +146,14 @@ export async function usarCiec<T>(
       contribuyente_id: contexto.contribuyenteId,
       accion: "uso_credencial",
       entidad: "credencial_fiscal",
-      entidad_id: credencial.id,
+      entidad_id: credencial?.id ?? null,
       ip: contexto.ip ?? null,
-      metadatos: { operacion: contexto.operacion, alcance: contexto.alcance, tipo: "ciec" },
+      metadatos: {
+        operacion: contexto.operacion,
+        alcance: contexto.alcance,
+        tipo: "ciec",
+        credencial_capturada: credencial !== null,
+      },
     },
   });
 

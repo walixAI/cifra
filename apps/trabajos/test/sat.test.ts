@@ -287,6 +287,24 @@ describe("barrerValidez — cancelar un CFDI que ya está en una póliza", () =>
       CredencialNoAutorizada,
     );
   });
+
+  it("aún sin CIEC capturada corre — todavía no hay UI (§7 inquilinos)", async () => {
+    // El seam de descifrado queda escrito, pero mientras no exista la captura tolera que no
+    // haya CredencialFiscal: entrega "" y lo anota en Bitácora.
+    await dueno.credencialFiscal.deleteMany({ where: { contribuyente_id: esc.contribuyenteId } });
+
+    sat.forzarCancelado(UUID_PAPELERIA);
+    const resultado = await barrerValidez(sat, { contribuyenteId: esc.contribuyenteId });
+    expect(resultado.detecciones).toHaveLength(1);
+
+    const usos = await db.bitacora.findMany({
+      where: { accion: "uso_credencial" },
+      orderBy: { creado_en: "desc" },
+    });
+    const barrido = usos.find((u) => (u.metadatos as { operacion: string }).operacion === "barrido_validez");
+    expect((barrido?.metadatos as { credencial_capturada: boolean }).credencial_capturada).toBe(false);
+    expect(barrido?.entidad_id).toBeNull();
+  });
 });
 
 // ── 2 · Dos organizaciones, mismo RFC, sin sincronizar en paralelo ──────────

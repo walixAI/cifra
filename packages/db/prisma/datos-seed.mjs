@@ -94,9 +94,10 @@ export async function sembrarDatos(prisma) {
     },
   });
 
-  // CIEC cifrada con sobre. El valor en claro es de mentira; lo que importa es que
-  // apps/trabajos pueda descifrarlo dentro del worker. La organización personal tiene
-  // autorización `lectura_sat` (bajar CFDI, validar, leer constancia), otorgada por el
+  // CIEC cifrada con sobre. Todavía no hay UI para capturarla (§7 del documento de inquilinos):
+  // esto es fixture de desarrollo para que el worker ejerza el camino completo —autorización,
+  // descifrado de sobre, Bitácora—. El valor en claro es de mentira. La organización personal
+  // tiene autorización `lectura_sat` (bajar CFDI, validar, leer constancia), otorgada por el
   // propietario_fiscal.
   console.log("→ CIEC + autorización de la organización personal…");
   await prisma.credencialFiscal.create({
