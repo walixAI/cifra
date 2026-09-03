@@ -38,7 +38,10 @@ let entorno: PgEmbebido;
 let prismaModulo: typeof import("@cifra/db");
 let sincronizarContribuyente: typeof import("../src/servicios/sincronizar").sincronizarContribuyente;
 let barrerValidez: typeof import("../src/servicios/validez").barrerValidez;
+let conCandadoRfc: typeof import("../src/servicios/candado-rfc").conCandadoRfc;
 let CandadoRfcOcupado: typeof import("../src/servicios/candado-rfc").CandadoRfcOcupado;
+let ArrendamientoPerdido: typeof import("../src/servicios/candado-rfc").ArrendamientoPerdido;
+let DURACION_ARRENDAMIENTO_MS: number;
 let CredencialNoAutorizada: typeof import("../src/credenciales").CredencialNoAutorizada;
 let cifrarConSobre: typeof import("../src/credenciales").cifrarConSobre;
 
@@ -51,7 +54,9 @@ beforeAll(async () => {
   prismaModulo = await import("@cifra/db");
   ({ sincronizarContribuyente } = await import("../src/servicios/sincronizar"));
   ({ barrerValidez } = await import("../src/servicios/validez"));
-  ({ CandadoRfcOcupado } = await import("../src/servicios/candado-rfc"));
+  ({ conCandadoRfc, CandadoRfcOcupado, ArrendamientoPerdido, DURACION_ARRENDAMIENTO_MS } = await import(
+    "../src/servicios/candado-rfc"
+  ));
   ({ CredencialNoAutorizada, cifrarConSobre } = await import("../src/credenciales"));
 }, 180_000);
 
@@ -153,7 +158,7 @@ describe("barrerValidez — cancelar un CFDI que ya está en una póliza", () =>
     sat = new ClienteSatFalso(seedConPapeleriaVigente);
 
     // Baja los CFDI del seed y arma la póliza + resumen del periodo de agosto.
-    await sincronizarContribuyente(sat, { contribuyenteId: esc.contribuyenteId, workerId: "test-sync" });
+    await sincronizarContribuyente(sat, { contribuyenteId: esc.contribuyenteId, corrida: "test-sync", intento: 0 });
 
     // Póliza D-0142 desde el CFDI de papelería (3B77…A20), vigente al contabilizar.
     // Asientos del seed: gasto $1,879.00 + IVA acreditable $301.00 = banco $2,180.00.
@@ -329,8 +334,8 @@ describe("candado por RFC — dos organizaciones con el mismo RFC", () => {
     const sat = new ClienteSatFalso({ ...seed, contribuyente: { ...seed.contribuyente, rfc } }, { latenciaMs: 300 });
 
     const [r1, r2] = await Promise.allSettled([
-      sincronizarContribuyente(sat, { contribuyenteId: a.contribuyenteId, workerId: "worker-a" }),
-      sincronizarContribuyente(sat, { contribuyenteId: b.contribuyenteId, workerId: "worker-b" }),
+      sincronizarContribuyente(sat, { contribuyenteId: a.contribuyenteId, corrida: "worker-a", intento: 0 }),
+      sincronizarContribuyente(sat, { contribuyenteId: b.contribuyenteId, corrida: "worker-b", intento: 0 }),
     ]);
 
     const exitos = [r1, r2].filter((r) => r.status === "fulfilled");
@@ -353,9 +358,190 @@ describe("candado por RFC — dos organizaciones con el mismo RFC", () => {
     const b = await sembrarContribuyenteConCiec(dueno, { rfc, slug: "org-b2" });
     const sat = new ClienteSatFalso({ ...seed, contribuyente: { ...seed.contribuyente, rfc } });
 
-    await sincronizarContribuyente(sat, { contribuyenteId: a.contribuyenteId, workerId: "w1" });
+    await sincronizarContribuyente(sat, { contribuyenteId: a.contribuyenteId, corrida: "w1", intento: 0 });
     // Secuencial: ya no hay traslape, el candado está libre.
-    const segundo = await sincronizarContribuyente(sat, { contribuyenteId: b.contribuyenteId, workerId: "w2" });
+    const segundo = await sincronizarContribuyente(sat, { contribuyenteId: b.contribuyenteId, corrida: "w2", intento: 0 });
     expect(segundo.corte).toBeInstanceOf(Date);
+  });
+});
+
+// ── 3 · Arrendamiento del candado: worker muerto, renovación, zombi, reintento ──
+
+describe("arrendamiento por RFC — TTL, renovación y recuperación", () => {
+  let dueno: Awaited<ReturnType<typeof clienteDueno>>;
+
+  beforeAll(async () => {
+    dueno = await clienteDueno();
+  });
+  afterAll(async () => {
+    await dueno.$disconnect();
+  });
+
+  it("un worker que muere sin soltar no bloquea: otro recupera pasado el TTL, sin duplicar", async () => {
+    await limpiar(dueno);
+    const rfc = "MUER010101AAA";
+    const esc = await sembrarContribuyenteConCiec(dueno, { rfc, slug: "org-muerto" });
+    const db = prismaModulo.prismaPara(esc.contribuyenteId);
+    const sat = new ClienteSatFalso({ ...seed, contribuyente: { ...seed.contribuyente, rfc } });
+
+    const t0 = new Date("2026-09-02T12:00:00Z");
+
+    // Un worker de otra corrida adquirió el candado y murió: la fila quedó con su worker_id y
+    // un arrendamiento que ya venció (dejó de renovar hace más de 15 min).
+    await dueno.sincronizacionRfc.create({
+      data: {
+        rfc,
+        worker_id: "corrida-muerta#0",
+        arrendamiento_hasta: new Date(t0.getTime() - 60_000),
+        ultimo_intento: new Date(t0.getTime() - DURACION_ARRENDAMIENTO_MS - 60_000),
+      },
+    });
+
+    const rescate = await sincronizarContribuyente(sat, {
+      contribuyenteId: esc.contribuyenteId,
+      corrida: "corrida-rescate",
+      intento: 0,
+      ahora: () => t0,
+    });
+    expect(rescate.corte).toBeInstanceOf(Date);
+    expect(rescate.cfdiNuevos).toBeGreaterThan(0);
+
+    const fila = await dueno.sincronizacionRfc.findUnique({ where: { rfc } });
+    expect(fila?.worker_id).toBeNull();
+    expect(fila?.arrendamiento_hasta).toBeNull();
+    expect(fila?.cursor).toBeInstanceOf(Date);
+
+    const n1 = await db.cfdi.count();
+    expect(n1).toBeGreaterThan(0);
+
+    // Otra corrida completa desde el mismo punto (cursor a cero): la bajada es idempotente
+    // —upsert por (contribuyente_id, uuid)— y no debe duplicar nada.
+    await dueno.sincronizacionRfc.update({ where: { rfc }, data: { cursor: null } });
+    const otra = await sincronizarContribuyente(sat, {
+      contribuyenteId: esc.contribuyenteId,
+      corrida: "corrida-otra",
+      intento: 0,
+      ahora: () => new Date(t0.getTime() + 60_000),
+    });
+    expect(otra.cfdiNuevos).toBe(0);
+    expect(otra.cfdiActualizados).toBe(n1);
+    expect(await db.cfdi.count()).toBe(n1);
+  });
+
+  it("renovar() mantiene el arrendamiento a lo largo de una fn más larga que el TTL", async () => {
+    await limpiar(dueno);
+    const rfc = "RENO010101AAA";
+    let t = new Date("2026-09-02T00:00:00Z");
+
+    const resultado = await conCandadoRfc(
+      dueno,
+      rfc,
+      { id: "larga#0", corrida: "larga" },
+      async (candado) => {
+        // 4 pasos de 10 min: 40 min en total, muy por encima del TTL de 15. Sin renovar, el
+        // candado se perdería en el segundo paso.
+        for (let paso = 0; paso < 4; paso++) {
+          t = new Date(t.getTime() + 10 * 60_000);
+          await candado.renovar();
+          const fila = await dueno.sincronizacionRfc.findUnique({ where: { rfc } });
+          expect(fila?.worker_id).toBe("larga#0");
+          expect(fila?.arrendamiento_hasta?.getTime()).toBe(t.getTime() + DURACION_ARRENDAMIENTO_MS);
+        }
+        expect(candado.renovaciones).toBe(4);
+        return "completado";
+      },
+      { ahora: () => t },
+    );
+
+    expect(resultado).toBe("completado");
+    const fin = await dueno.sincronizacionRfc.findUnique({ where: { rfc } });
+    expect(fin?.worker_id).toBeNull();
+    expect(fin?.arrendamiento_hasta).toBeNull();
+  });
+
+  it("un worker zombi no puede renovar después de que otro recuperó el candado", async () => {
+    await limpiar(dueno);
+    const rfc = "ZOMB010101AAA";
+    let t = new Date("2026-09-02T00:00:00Z");
+
+    await conCandadoRfc(
+      dueno,
+      rfc,
+      { id: "zombi#0", corrida: "zombi" },
+      async (candado) => {
+        // El zombi se cuelga: pasa el TTL sin renovar.
+        t = new Date(t.getTime() + DURACION_ARRENDAMIENTO_MS + 60_000);
+
+        // Otro worker, otra corrida, toma el candado vencido y lo mantiene un rato.
+        await conCandadoRfc(
+          dueno,
+          rfc,
+          { id: "vivo#0", corrida: "vivo" },
+          async () => {
+            // El zombi despierta y quiere renovar mientras 'vivo' tiene el candado: se le niega.
+            await expect(candado.renovar()).rejects.toBeInstanceOf(ArrendamientoPerdido);
+          },
+          { ahora: () => t },
+        );
+
+        // Y sigue sin poder aunque 'vivo' ya lo haya liberado: el worker_id ya no es suyo.
+        await expect(candado.renovar()).rejects.toBeInstanceOf(ArrendamientoPerdido);
+      },
+      { ahora: () => t },
+    );
+
+    // El finally del zombi corrió pero no pisó nada ajeno: el candado quedó libre.
+    const fila = await dueno.sincronizacionRfc.findUnique({ where: { rfc } });
+    expect(fila?.worker_id).toBeNull();
+    expect(fila?.arrendamiento_hasta).toBeNull();
+  });
+
+  it("un reintento recupera el arrendamiento huérfano de su intento anterior y lo marca como incidente", async () => {
+    await limpiar(dueno);
+    const rfc = "REIN010101AAA";
+    const esc = await sembrarContribuyenteConCiec(dueno, { rfc, slug: "org-reintento" });
+    const sat = new ClienteSatFalso({ ...seed, contribuyente: { ...seed.contribuyente, rfc } });
+    const t0 = new Date("2026-09-02T12:00:00Z");
+
+    // El intento 0 de la corrida 'corrida-x' adquirió el candado y cayó: la fila quedó con su
+    // worker_id y un arrendamiento TODAVÍA VIGENTE (cayó hace poco, el TTL no ha vencido).
+    await dueno.sincronizacionRfc.create({
+      data: {
+        rfc,
+        worker_id: "corrida-x#0",
+        arrendamiento_hasta: new Date(t0.getTime() + 10 * 60_000),
+        ultimo_intento: t0,
+      },
+    });
+
+    const incidentes: Array<{ rfc: string; huerfano: string; corrida: string }> = [];
+    const r = await sincronizarContribuyente(sat, {
+      contribuyenteId: esc.contribuyenteId,
+      corrida: "corrida-x",
+      intento: 1,
+      ahora: () => t0,
+      alRecuperarHuerfano: (i) => incidentes.push(i),
+    });
+    expect(r.corte).toBeInstanceOf(Date);
+    expect(r.cfdiNuevos).toBeGreaterThan(0);
+    expect(incidentes).toEqual([{ rfc, huerfano: "corrida-x#0", corrida: "corrida-x" }]);
+
+    // Contraste: una corrida DISTINTA contra ese mismo arrendamiento vigente es "ocupado"
+    // normal, no un incidente.
+    await dueno.sincronizacionRfc.update({
+      where: { rfc },
+      data: { worker_id: "corrida-x#1", arrendamiento_hasta: new Date(t0.getTime() + 10 * 60_000) },
+    });
+    const incidentesAjenos: unknown[] = [];
+    await expect(
+      sincronizarContribuyente(sat, {
+        contribuyenteId: esc.contribuyenteId,
+        corrida: "corrida-otra",
+        intento: 0,
+        ahora: () => t0,
+        alRecuperarHuerfano: (i) => incidentesAjenos.push(i),
+      }),
+    ).rejects.toBeInstanceOf(CandadoRfcOcupado);
+    expect(incidentesAjenos).toHaveLength(0);
   });
 });

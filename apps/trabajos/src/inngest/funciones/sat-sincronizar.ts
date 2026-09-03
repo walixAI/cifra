@@ -49,20 +49,26 @@ export const sincronizarUno = inngest.createFunction(
     retries: 4,
     triggers: [{ event: EVENTOS.cfdiContribuyente }],
   },
-  async ({ event, step, runId }) => {
+  async ({ event, step, runId, attempt }) => {
     const datos = event.data as DatosContribuyente;
     return step.run("descargar-y-guardar", async () => {
       try {
         return await sincronizarContribuyente(clienteSat(), {
           contribuyenteId: datos.contribuyenteId,
-          workerId: runId,
+          // `corrida` es estable entre reintentos; `intento` los distingue, para que un
+          // reintento no choque contra el arrendamiento que dejó el intento anterior.
+          corrida: runId,
+          intento: attempt,
         });
       } catch (error) {
-        // Si otro worker tiene el candado (carrera con la red de abajo), no es un fallo: se
-        // deja para el próximo ciclo.
+        // Otro worker legítimo tiene el candado del RFC (carrera con la red de abajo): es
+        // normal, se deja para el próximo ciclo.
         if (error instanceof CandadoRfcOcupado) {
           return { omitido: true, razon: error.message };
         }
+        // El arrendamiento se perdió a media corrida — otro worker lo recuperó tras el TTL
+        // porque este dejó de renovar. NO es un estado para dar por cerrado: que Inngest
+        // reintente (y cualquier otro error, igual que antes).
         throw error;
       }
     });

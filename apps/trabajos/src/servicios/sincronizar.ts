@@ -11,11 +11,19 @@ import { AÑOS_PRIMERA_BAJADA } from "../entorno";
 import { usarCiec } from "../credenciales";
 import { conCandadoRfc, registrarIntentoRfc } from "./candado-rfc";
 
+/** Cada cuántos CFDI guardados se renueva el arrendamiento del candado dentro del lote. */
+const RENOVAR_CADA = 25;
+
 export interface EntradaSincronizar {
   contribuyenteId: string;
-  workerId: string;
+  /** Identificador de la corrida de Inngest, estable entre reintentos (el `runId`). */
+  corrida: string;
+  /** Número de intento de esa corrida (Inngest `attempt`; 0 el primero). */
+  intento: number;
   /** Reloj inyectable para pruebas. */
   ahora?: () => Date;
+  /** Se invoca si un reintento recupera el arrendamiento huérfano de un intento anterior. */
+  alRecuperarHuerfano?: (info: { rfc: string; huerfano: string; corrida: string }) => void;
 }
 
 export interface ResultadoSincronizar {
@@ -111,8 +119,8 @@ export async function sincronizarContribuyente(
   return conCandadoRfc(
     prisma,
     contribuyente.rfc,
-    entrada.workerId,
-    async () => {
+    { id: `${entrada.corrida}#${entrada.intento}`, corrida: entrada.corrida },
+    async (candado) => {
       const rfcSync = await prisma.sincronizacionRfc.findUnique({ where: { rfc: contribuyente.rfc } });
       const corte = ahora();
       const desde =
@@ -136,14 +144,22 @@ export async function sincronizarContribuyente(
           (ciec) => sat.descargarCfdi({ rfc: contribuyente.rfc, ciec }, { desde, hasta: corte }),
         );
 
+        // Paso durable: terminó la descarga (lo más lento y lo que más tarda si el SAT va
+        // lento). Renueva antes de entrar al lote de escritura.
+        await candado.renovar();
+
         let nuevos = 0;
         let actualizados = 0;
+        let procesados = 0;
         for (const c of descargados) {
           const r = await guardarCfdi(db, entrada.contribuyenteId, c);
           if (r === "nuevo") nuevos += 1;
           else actualizados += 1;
+          // Paso durable dentro del lote: la primera bajada puede traer años de CFDI.
+          if (++procesados % RENOVAR_CADA === 0) await candado.renovar();
         }
 
+        await candado.renovar();
         await registrarIntentoRfc(prisma, contribuyente.rfc, { cursor: corte });
         await db.sincronizacionSat.update({
           where: { id: registro.id },
@@ -174,6 +190,6 @@ export async function sincronizarContribuyente(
         throw error;
       }
     },
-    { ahora },
+    { ahora, alRecuperarHuerfano: entrada.alRecuperarHuerfano },
   );
 }

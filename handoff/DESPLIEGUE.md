@@ -151,7 +151,26 @@ El worker usa el mismo esquema que el web. El paso 7 no agrega migraciones: `sin
 (con los campos del candado) y `sincronizacion_sat` ya venían en la migración `plataforma` del
 paso 2. `prisma migrate deploy` de §2 es todo lo que hace falta.
 
-### 4.4 · Fronteras
+### 4.4 · Qué pasa si un worker muere a media sincronización
+
+El candado por RFC (`SincronizacionRfc`) es un arrendamiento de **15 minutos que se renueva en
+cada paso durable** de la bajada (`candado-rfc.ts`). Un worker vivo pero lento no lo pierde
+—sigue renovando—; un worker muerto deja de renovar y el arrendamiento vence solo en ≤ 15 min,
+sin intervención. Quien lo recupera es la siguiente corrida de ese RFC (el fan-out del cron de
+6 h, o un reintento). La bajada es idempotente (upsert por `(contribuyente_id, uuid)`, el
+`cursor` solo avanza al terminar bien), así que recuperar no duplica nada.
+
+Dos detalles que importan en operación:
+
+- El `worker_id` lleva el número de intento (`${runId}#${intento}`), no solo el `runId`. Un
+  reintento de la misma corrida reconoce el arrendamiento que dejó el intento anterior como
+  **huérfano**, lo registra como incidente (`console.error` + callback) y lo retoma; no se
+  queda bloqueado 15 min contra sí mismo.
+- Si un worker pierde el arrendamiento a media corrida (otro lo recuperó tras el TTL), la
+  renovación siguiente lanza `ArrendamientoPerdido` y la corrida aborta para que Inngest la
+  reintente — nunca se pisa al worker que ya tomó el candado.
+
+### 4.5 · Fronteras
 
 - `apps/trabajos` es un **despliegue separado** de `apps/web` y el **único lugar donde se
   descifra la CIEC**.
