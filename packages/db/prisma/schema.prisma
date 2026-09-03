@@ -795,23 +795,31 @@ model ConversacionIA {
   contribuyente Contribuyente @relation(fields: [contribuyente_id], references: [id], onDelete: Cascade)
   mensajes      MensajeIA[]
 
+  // Necesario para que mensaje_ia pueda apuntar una FK compuesta a (contribuyente_id, id):
+  // así el contribuyente_id denormalizado del mensaje no puede divergir del de su conversación.
+  @@unique([contribuyente_id, id])
   @@index([contribuyente_id, creado_en])
   @@map("conversacion_ia")
 }
 
+/// contribuyente_id va denormalizado (como en asiento) para que rls.sql proteja la tabla —
+/// sin él, un mensaje de la IA de un contribuyente sería visible para otro. La FK a la
+/// conversación es compuesta sobre (contribuyente_id, conversacion_id): el mensaje no puede
+/// quedar en una conversación de otro contribuyente ni con un contribuyente_id inventado.
 model MensajeIA {
-  id              String         @id @default(uuid()) @db.Uuid
-  conversacion_id String         @db.Uuid
-  conversacion    ConversacionIA @relation(fields: [conversacion_id], references: [id], onDelete: Cascade)
-  rol             String // user | ai
-  texto           String
+  id               String         @id @default(uuid()) @db.Uuid
+  contribuyente_id String         @db.Uuid
+  conversacion_id  String         @db.Uuid
+  conversacion     ConversacionIA @relation(fields: [contribuyente_id, conversacion_id], references: [contribuyente_id, id], onDelete: Cascade)
+  rol              String // user | ai
+  texto            String
   /// OBLIGATORIO en todo mensaje de la IA. Una respuesta sin origen es un defecto (regla 12).
-  fuentes         String?
+  fuentes          String?
   /// IDs de los registros que sustentan la respuesta, para poder navegar al origen
-  referencias     Json?
-  creado_en       DateTime @default(now())
+  referencias      Json?
+  creado_en        DateTime       @default(now())
 
-  @@index([conversacion_id, creado_en])
+  @@index([contribuyente_id, conversacion_id, creado_en])
   @@map("mensaje_ia")
 }
 

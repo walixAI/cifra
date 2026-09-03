@@ -4,7 +4,8 @@
 // su propio rls.sql incluido) tal cual correrían en Neon, y confirma que el cliente con alcance
 // de una no ve ni una fila de la otra. Cubre tablas de plataforma (resumen_contribuyente,
 // acceso) y las dos tablas fiscales a las que el schema de referencia les faltaba
-// contribuyente_id (cfdi, asiento).
+// contribuyente_id (cfdi, asiento), y mensaje_ia — que ganó contribuyente_id denormalizado con
+// FK compuesta a (contribuyente_id, conversacion_id) para poder entrar a rls.sql.
 //
 // Dos condiciones que la hacen una prueba de la POLÍTICA y no del ORM:
 //   1. Todo se hace conectado como `cifra_app`: no es dueño de las tablas ni superusuario, así
@@ -117,7 +118,22 @@ async function sembrarOrganizacion(nombre: string, sufijoRfc: string) {
     },
   });
 
-  return { organizacion, contribuyente, cuentaContable, poliza, asiento, cfdi };
+  // mensaje_ia — misma corrección que asiento en el paso 7: contribuyente_id denormalizado, y
+  // aquí además con FK compuesta a la conversación.
+  const conversacion = await dueno.conversacionIA.create({
+    data: { contribuyente_id: contribuyente.id },
+  });
+  const mensajeIa = await dueno.mensajeIA.create({
+    data: {
+      contribuyente_id: contribuyente.id,
+      conversacion_id: conversacion.id,
+      rol: "ai",
+      texto: `Respuesta para ${sufijoRfc}`,
+      fuentes: "cfdi:1",
+    },
+  });
+
+  return { organizacion, contribuyente, cuentaContable, poliza, asiento, cfdi, conversacion, mensajeIa };
 }
 
 describe("aislamiento por contribuyente (RLS)", () => {
@@ -211,6 +227,49 @@ describe("aislamiento por contribuyente (RLS)", () => {
     }
   });
 
+  it("mensaje_ia — contribuyente_id denormalizado con FK compuesta a la conversación — queda aislado", async () => {
+    const dbA = prismaPara(orgA.contribuyente.id);
+
+    const mensajes = await dbA.mensajeIA.findMany();
+    expect(mensajes).toHaveLength(1);
+    expect(mensajes[0]?.contribuyente_id).toBe(orgA.contribuyente.id);
+    expect(mensajes[0]?.id).toBe(orgA.mensajeIa.id);
+
+    const conversaciones = await dbA.conversacionIA.findMany();
+    expect(conversaciones).toHaveLength(1);
+    expect(conversaciones[0]?.contribuyente_id).toBe(orgA.contribuyente.id);
+
+    // SQL crudo y sin WHERE: mensaje_ia también quedó con FORCE ROW LEVEL SECURITY tras
+    // re-correr rls.sql, y sin GUC no devuelve ni una fila.
+    const cliente = new ClientePg({ connectionString: entorno.urlApp });
+    await cliente.connect();
+    try {
+      const tabla = await cliente.query(`
+        SELECT c.relrowsecurity AS rowsecurity, c.relforcerowsecurity AS forcerowsecurity
+        FROM pg_class c
+        WHERE c.relname = 'mensaje_ia' AND c.relkind = 'r'
+      `);
+      expect(tabla.rows[0].rowsecurity).toBe(true);
+      expect(tabla.rows[0].forcerowsecurity).toBe(true);
+
+      await cliente.query("BEGIN");
+      const sinGuc = await cliente.query("SELECT contribuyente_id FROM mensaje_ia");
+      await cliente.query("COMMIT");
+      expect(sinGuc.rows).toHaveLength(0);
+
+      await cliente.query("BEGIN");
+      await cliente.query("SELECT set_config('app.contribuyente_id', $1, true)", [
+        orgB.contribuyente.id,
+      ]);
+      const soloB = await cliente.query("SELECT contribuyente_id FROM mensaje_ia");
+      await cliente.query("COMMIT");
+      expect(soloB.rows).toHaveLength(1);
+      expect(soloB.rows[0].contribuyente_id).toBe(orgB.contribuyente.id);
+    } finally {
+      await cliente.end();
+    }
+  });
+
   it("SQL crudo sin WHERE, fuera de Prisma: filtra la política, no el ORM", async () => {
     const cliente = new ClientePg({ connectionString: entorno.urlApp });
     await cliente.connect();
@@ -254,5 +313,42 @@ describe("aislamiento por contribuyente (RLS)", () => {
         },
       }),
     ).rejects.toThrow();
+
+    // mensaje_ia: el alcance de A no puede escribir un mensaje con contribuyente_id de B
+    // (WITH CHECK de la política).
+    await expect(
+      dbA.mensajeIA.create({
+        data: {
+          contribuyente_id: orgB.contribuyente.id,
+          conversacion_id: orgB.conversacion.id,
+          rol: "user",
+          texto: "intruso",
+        },
+      }),
+    ).rejects.toThrow();
+
+    // Y aunque el contribuyente_id sea el propio, la FK compuesta impide colgar el mensaje de
+    // una conversación de otro contribuyente: no existe conversacion_ia (A, id-de-conv-de-B).
+    await expect(
+      dbA.mensajeIA.create({
+        data: {
+          contribuyente_id: orgA.contribuyente.id,
+          conversacion_id: orgB.conversacion.id,
+          rol: "user",
+          texto: "conversación ajena",
+        },
+      }),
+    ).rejects.toThrow();
+
+    // El camino válido sí funciona: contribuyente propio + conversación propia.
+    const ok = await dbA.mensajeIA.create({
+      data: {
+        contribuyente_id: orgA.contribuyente.id,
+        conversacion_id: orgA.conversacion.id,
+        rol: "user",
+        texto: "pregunta legítima",
+      },
+    });
+    expect(ok.contribuyente_id).toBe(orgA.contribuyente.id);
   });
 });
