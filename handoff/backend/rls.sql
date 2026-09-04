@@ -30,6 +30,12 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- La bitácora es de solo escritura y lectura: nadie la edita ni la borra.
 REVOKE UPDATE, DELETE ON TABLE bitacora FROM cifra_app;
 
+-- Los registros fiscales no se borran: se revierten con una póliza en contra o se marcan.
+-- Que lo garantice la base y no la disciplina de quien escriba el próximo endpoint.
+-- (cfdi_impuesto NO va aquí: los impuestos son propiedad del comprobante y la sincronización
+-- del SAT los reemplaza enteros con deleteMany + createMany.)
+REVOKE DELETE ON TABLE cfdi, poliza, asiento, declaracion FROM cifra_app;
+
 -- 2 · Política de aislamiento ------------------------------------------------
 -- Se aplica a TODA tabla que tenga una columna contribuyente_id no nula.
 -- Falla cerrada: si nadie fijó app.contribuyente_id, current_setting devuelve
