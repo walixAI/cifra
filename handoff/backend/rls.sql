@@ -73,10 +73,14 @@ END $$;
 -- armada por la app (una versión anterior de esto lo hacía), RLS dejaría de ser la red de
 -- seguridad para esta tabla: bastaría un bug al armar la lista para que la política la
 -- aprobara. Cuerpo real en prisma/migrations/20260905050613_auth_cartera/migration.sql (paso 8).
+-- DROP IF EXISTS antes de cada CREATE — igual que el loop de arriba — para que este archivo se
+-- pueda volver a correr entero sin tronar (lo dice su propio encabezado: es idempotente).
 
+DROP POLICY IF EXISTS acceso_propio ON public.acceso;
 CREATE POLICY acceso_propio ON public.acceso
   USING (usuario_id = NULLIF(current_setting('app.usuario_id', true), '')::uuid);
 
+DROP POLICY IF EXISTS cartera_por_acceso ON public.resumen_contribuyente;
 CREATE POLICY cartera_por_acceso ON public.resumen_contribuyente
   USING (contribuyente_id IN (
     SELECT contribuyente_id FROM acceso
@@ -90,6 +94,7 @@ CREATE POLICY cartera_por_acceso ON public.resumen_contribuyente
 -- contraseña. La política deriva el permiso de un hecho que quien pide demuestra, no de una
 -- lista. Cuerpo real en prisma/migrations/20260905153614_invitacion_por_token/migration.sql.
 
+DROP POLICY IF EXISTS acceso_por_token ON public.acceso;
 CREATE POLICY acceso_por_token ON public.acceso
   USING (token IS NOT NULL AND token = NULLIF(current_setting('app.token_invitacion', true), ''));
 
