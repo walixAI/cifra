@@ -51,9 +51,12 @@ export async function sembrarDatos(prisma) {
     data: { nombre: datos.contribuyente.nombreCompleto, tipo: "personal" },
   });
 
+  // Correo real, no de prueba: es el contribuyente ficticio que vive en producción para poder
+  // probar la vertical de Impuestos de punta a punta con login de verdad (magic link por Resend).
+  // El resto de los usuarios del seed (Ana, los invitados) sí son *.test.
   const jose = await prisma.usuario.create({
     data: {
-      email: "jose.torres@cifra.test",
+      email: "jattonio@gmail.com",
       nombre: datos.contribuyente.nombreCompleto,
       email_verificado_en: new Date(),
     },
