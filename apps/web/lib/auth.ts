@@ -79,9 +79,14 @@ export async function auth(): Promise<Sesion | null> {
     if (!usuario) return null;
     if (viaBypass) await registrarUsoDeBypass(usuario.id);
     return { usuario: { id: usuario.id, email: usuario.email } };
-  } catch {
-    // Sin Postgres local corriendo (falta `pnpm db:dev`) esto fallaría al conectar — se trata
-    // igual que "no hay sesión", no como un error de servidor.
+  } catch (error) {
+    // En producción un error real de Prisma NO se disfraza de "no hay sesión": contexto() lo
+    // deja subir y se vuelve un 500 de verdad. Pasó exactamente al revés una vez — el binario del
+    // motor de Prisma faltaba en el runtime de Vercel (ver binaryTargets en schema.prisma) y este
+    // catch lo convertía en NoAutenticado, y NoAutenticado en un 404 que parecía "falta login".
+    if (!enDesarrollo) throw error;
+    // Sin Postgres local corriendo (falta `pnpm db:dev`) esto fallaría al conectar — en
+    // desarrollo sí se trata igual que "no hay sesión", no como un error de servidor.
     return null;
   }
 }

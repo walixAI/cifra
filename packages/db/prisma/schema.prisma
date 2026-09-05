@@ -11,7 +11,12 @@
 generator client {
   provider      = "prisma-client-js"
   output        = "../src/generated/client"
-  binaryTargets = ["native"]
+  // "native" genera el motor de la máquina donde corre `prisma generate` (el contenedor de build
+  // de Vercel, Debian) — pero el runtime de las Functions de Vercel es otro (Amazon Linux,
+  // rhel-openssl-3.0.x). Sin este segundo target, el cliente se genera bien y compila bien, pero
+  // truena en producción buscando un motor que nunca se copió — y como auth() atrapa cualquier
+  // error de Prisma como "no hay sesión" (ver apps/web/lib/auth.ts), esto se disfrazaba de 404.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
