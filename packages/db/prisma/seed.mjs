@@ -13,8 +13,15 @@ const cliPrisma = join(directorioPaquete, "node_modules", "prisma", "build", "in
 
 async function main() {
   const local = await asegurarBaseLocal();
-  process.env.DATABASE_URL = local.url;
-  process.env.DIRECT_URL = local.url;
+  // Solo pisa las variables de entorno cuando el Postgres es el local propio: ahí "url" sirve
+  // para las dos (mismo servidor, un solo rol dueño). Si ya había DATABASE_URL en el entorno
+  // (Neon), asegurarBaseLocal() lo devuelve tal cual en `local.url` — pisar DIRECT_URL con eso
+  // reemplazaba la cadena del dueño por la de cifra_app y hacía correr `migrate deploy` con un
+  // rol sin privilegios para migrar. Pasó de verdad: ver la migración 20260905050613 en Neon.
+  if (local.esLocal) {
+    process.env.DATABASE_URL = local.url;
+    process.env.DIRECT_URL = local.url;
+  }
 
   console.log(
     local.esLocal
