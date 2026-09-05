@@ -6,7 +6,7 @@
 // README).
 
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { contexto } from "@/lib/contexto";
 import { formatearDelta, formatearPesos, formatearPesosRedondo } from "@/lib/dinero";
 import { NoAutenticado, SinAcceso } from "@/lib/errores";
@@ -35,9 +35,10 @@ export default async function PaginaImpuestos({
     ctx = await contexto(slug);
   } catch (error) {
     // SinAcceso es un 404 real (§5 del documento de inquilinos: nunca confirmar que existe).
-    // NoAutenticado también cae aquí por ahora — auth() todavía es el placeholder del paso 2;
-    // cuando el paso 8 traiga Auth.js esto se vuelve un redirect a /login.
-    if (error instanceof SinAcceso || error instanceof NoAutenticado) notFound();
+    // NoAutenticado, con Auth.js ya puesto (paso 8), es un redirect a /login — el middleware ya
+    // debería haber atajado esto antes de llegar aquí; esto es el respaldo si no lo hizo.
+    if (error instanceof SinAcceso) notFound();
+    if (error instanceof NoAutenticado) redirect(`/login?callbackUrl=/${slug}/impuestos`);
     throw error;
   }
 

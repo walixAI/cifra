@@ -203,15 +203,22 @@ conectada todavía).
 
 ## 6 · Pendientes antes de usuarios reales
 
-Dos cosas temporales que entraron para poder verificar el paso 6 contra Neon real y que no
-deben quedarse:
-
-- **El bypass de `auth()`** (`apps/web/lib/auth.ts`, variable de entorno `AUTH_BYPASS_SECRETO`
-  en Vercel + cookie `cifra_auth_bypass`) — existe solo porque el paso 8 (Auth.js con magic
-  link) todavía no está. Cada uso deja un renglón en Bitácora (`accion: "bypass_dev_auth"`) y
-  un `console.warn`. Se borra en cuanto el paso 8 quede funcionando: el TODO exacto está al
-  inicio de `auth.ts`, y la variable se quita del entorno de Vercel el mismo día.
 - **El contribuyente ficticio en producción** (`TODA7606258I7`, sembrado por
   `packages/db/prisma/seed.mjs`/`datos-seed.mjs`) — vive en el Neon de producción para poder
   probar la vertical de Impuestos de punta a punta contra datos reales de RLS. Sacarlo antes de
   invitar al primer usuario real: no debe compartir base con contribuyentes de verdad.
+
+~~El bypass de `auth()` del paso 6~~ — resuelto en el paso 8: Auth.js con magic link lo
+reemplazó por completo (no se desactivó, se borró de `apps/web/lib/auth.ts`), y
+`AUTH_BYPASS_SECRETO` ya no está en el entorno de Vercel.
+
+### Auth.js (paso 8) — variables que Vercel necesita para que el login mande correo de verdad
+
+`AUTH_SECRET` (una por entorno, `openssl rand -base64 32`) tiene que estar puesta o Auth.js
+truena al primer request en producción — ya está. `EMAIL_SERVER`/`EMAIL_FROM` (Resend por SMTP)
+**todavía no** están puestas: sin ellas, `apps/web/lib/correo.ts` no simula en producción como
+en desarrollo — falla explícito (`CorreoNoConfigurado`), así que **el login no funciona en
+producción hasta que se configuren de verdad**. Es el comportamiento correcto (nunca fingir un
+envío que no pasó), pero significa acción pendiente: crear el dominio/API key en Resend y
+ponerlas en Vercel → Settings → Environment Variables (Production y Preview) antes de que
+alguien necesite entrar de verdad.

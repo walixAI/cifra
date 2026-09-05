@@ -1,92 +1,70 @@
-// PLACEHOLDER — se reemplaza en el paso 8 de PRIMEROS-PASOS.md con Auth.js v5 (magic link).
-// Existe ya para que contexto() (paso 2) tenga una fuente de sesión real que reemplazar, en vez
-// de inventarle una interfaz nueva más adelante.
+// Auth.js v5 con magic link — reemplaza el placeholder del paso 2. auth() mantiene su firma
+// exacta (`Sesion | null` con `{ usuario: { id, email } }`): contexto() en apps/web/lib/contexto.ts
+// no cambia ni una línea.
 //
-// En desarrollo, y SOLO en desarrollo, se sesiona automáticamente como José Antonio Torres
-// Delgado (jose.torres@cifra.test — el dueño de TODA7606258I7 en packages/db/prisma/seed.mjs)
-// para poder ver las pantallas en `pnpm dev` sin login real. Si el usuario no existe (no corrió
-// `pnpm db:seed`) o no hay base de datos a la mano, se cae a "no autenticado" sin tronar — nunca
-// un 500 por esto.
-//
-// En producción, por default, esto sigue sin hacer nada: siempre null. La única forma de entrar
-// antes de que exista Auth.js es fijar AUTH_BYPASS_SECRETO en el entorno (Vercel → Settings →
-// Environment Variables — NUNCA en el repo, NUNCA en .env.local) y mandar esa misma cadena en la
-// cookie `cifra_auth_bypass`. Sin la variable puesta, el bypass no existe: hace falta el secreto
-// Y haberlo puesto tú mismo en el entorno — no es un usuario fijo que cualquiera con la URL
-// pueda usar. Cada vez que se usa deja un renglón en Bitácora y un `console.warn` — una puerta
-// de servicio sin registro es justo lo que después nadie recuerda que existe.
-//
-// TODO(paso 8): en cuanto Auth.js con magic link esté funcionando, borra `bypassAutorizado`,
-// `coincideSecreto`, `registrarUsoDeBypass`, la constante `COOKIE_BYPASS` y la línea `const
-// viaBypass = ...` de `auth()` de vuelta a `if (!enDesarrollo) return null;` — y quita
-// AUTH_BYPASS_SECRETO del entorno de Vercel. Ver la tarea gemela en handoff/DESPLIEGUE.md §6.
+// El bypass de dos factores del paso 6 (AUTH_BYPASS_SECRETO / cookie cifra_auth_bypass) ya no
+// existe en este archivo ni en ningún otro — no se desactivó, se borró. Bórralo también de
+// Vercel (Settings → Environment Variables) el mismo día que esto se despliegue.
 
-import { timingSafeEqual } from "node:crypto";
-import { cookies, headers } from "next/headers";
-import { prisma } from "@cifra/db";
+import NextAuth from "next-auth";
+import Nodemailer from "next-auth/providers/nodemailer";
+import authConfig from "./auth.config";
+import { adaptadorUsuario } from "./adaptador-usuario";
+import { enviarCorreo } from "./correo";
+
+const { handlers, auth: authNextAuth, signIn, signOut } = NextAuth({
+  ...authConfig,
+  adapter: adaptadorUsuario(),
+  providers: [
+    Nodemailer({
+      // El provider exige un `server` no vacío al construirse, aunque nunca lo use: el envío de
+      // verdad pasa siempre por sendVerificationRequest → enviarCorreo() (lib/correo.ts), que lee
+      // EMAIL_SERVER por su cuenta y decide ahí si simula (desarrollo) o falla explícito
+      // (producción). Este placeholder solo evita que next build truene sin EMAIL_SERVER puesto.
+      server: process.env.EMAIL_SERVER || "smtp://localhost:1025",
+      from: process.env.EMAIL_FROM ?? "Cifra <hola@cifra.mx>",
+      // 24 horas: más largo que una sesión de trabajo típica, corto para no dejar un enlace
+      // viejo dando vueltas en una bandeja de entrada.
+      maxAge: 24 * 60 * 60,
+      async sendVerificationRequest({ identifier, url }) {
+        await enviarCorreo({
+          para: identifier,
+          asunto: "Tu enlace para entrar a Cifra",
+          texto:
+            `Entra a Cifra con este enlace — vale 24 horas:\n\n${url}\n\n` +
+            `Si no lo pediste tú, ignora este correo: no pasa nada.`,
+          html:
+            `<p>Entra a Cifra con este enlace — vale 24 horas:</p>` +
+            `<p><a href="${url}">${url}</a></p>` +
+            `<p style="color:#666">Si no lo pediste tú, ignora este correo: no pasa nada.</p>`,
+        });
+      },
+    }),
+  ],
+  callbacks: {
+    ...authConfig.callbacks,
+    // Primera vez que entra tras verificar el enlace: `user` trae el id real que devolvió el
+    // adaptador (createUser/getUserByEmail). Se copia al token para que sobreviva entre
+    // peticiones sin volver a tocar la base — la sesión es JWT, no de base de datos.
+    async jwt({ token, user }) {
+      if (user?.id) token.sub = user.id;
+      return token;
+    },
+    async session({ session, token }) {
+      if (token.sub && session.user) session.user.id = token.sub;
+      return session;
+    },
+  },
+});
+
+export { handlers, signIn, signOut };
 
 export interface Sesion {
   usuario: { id: string; email: string };
 }
 
-const CORREO_DEV = "jose.torres@cifra.test";
-const COOKIE_BYPASS = "cifra_auth_bypass";
-
-function coincideSecreto(cookie: string, secreto: string): boolean {
-  const a = Buffer.from(cookie);
-  const b = Buffer.from(secreto);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
-async function bypassAutorizado(): Promise<boolean> {
-  const secreto = process.env.AUTH_BYPASS_SECRETO;
-  if (!secreto) return false; // sin la variable de entorno, esta puerta no existe
-
-  const cookie = (await cookies()).get(COOKIE_BYPASS)?.value;
-  return cookie !== undefined && coincideSecreto(cookie, secreto);
-}
-
-/** Rastro del bypass: un renglón en Bitácora (mejor esfuerzo) y siempre un `warn`, aunque el
- * insert falle — no bloquea el acceso por eso, pero nunca queda sin ninguna huella. */
-async function registrarUsoDeBypass(usuarioId: string): Promise<void> {
-  const ip = (await headers()).get("x-forwarded-for");
-  console.warn(
-    `[auth] bypass de desarrollo usado en producción: sesión de ${CORREO_DEV} (usuario ${usuarioId}), ip ${ip ?? "desconocida"}`,
-  );
-  try {
-    await prisma.bitacora.create({
-      data: {
-        usuario_id: usuarioId,
-        accion: "bypass_dev_auth",
-        entidad: "usuario",
-        entidad_id: usuarioId,
-        ip: ip ?? null,
-        metadatos: { correo: CORREO_DEV },
-      },
-    });
-  } catch (error) {
-    console.error("[auth] no se pudo escribir en Bitácora el uso del bypass", error);
-  }
-}
-
 export async function auth(): Promise<Sesion | null> {
-  const enDesarrollo = process.env.NODE_ENV !== "production";
-  const viaBypass = !enDesarrollo && (await bypassAutorizado());
-  if (!enDesarrollo && !viaBypass) return null;
-
-  try {
-    const usuario = await prisma.usuario.findUnique({ where: { email: CORREO_DEV } });
-    if (!usuario) return null;
-    if (viaBypass) await registrarUsoDeBypass(usuario.id);
-    return { usuario: { id: usuario.id, email: usuario.email } };
-  } catch (error) {
-    // En producción un error real de Prisma NO se disfraza de "no hay sesión": contexto() lo
-    // deja subir y se vuelve un 500 de verdad. Pasó exactamente al revés una vez — el binario del
-    // motor de Prisma faltaba en el runtime de Vercel (ver binaryTargets en schema.prisma) y este
-    // catch lo convertía en NoAutenticado, y NoAutenticado en un 404 que parecía "falta login".
-    if (!enDesarrollo) throw error;
-    // Sin Postgres local corriendo (falta `pnpm db:dev`) esto fallaría al conectar — en
-    // desarrollo sí se trata igual que "no hay sesión", no como un error de servidor.
-    return null;
-  }
+  const sesion = await authNextAuth();
+  if (!sesion?.user?.id || !sesion.user.email) return null;
+  return { usuario: { id: sesion.user.id, email: sesion.user.email } };
 }
