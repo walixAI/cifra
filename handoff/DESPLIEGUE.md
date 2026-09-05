@@ -212,13 +212,19 @@ conectada todavía).
 reemplazó por completo (no se desactivó, se borró de `apps/web/lib/auth.ts`), y
 `AUTH_BYPASS_SECRETO` ya no está en el entorno de Vercel.
 
-### Auth.js (paso 8) — variables que Vercel necesita para que el login mande correo de verdad
+### Auth.js (paso 8) — variables de Vercel
 
-`AUTH_SECRET` (una por entorno, `openssl rand -base64 32`) tiene que estar puesta o Auth.js
-truena al primer request en producción — ya está. `EMAIL_SERVER`/`EMAIL_FROM` (Resend por SMTP)
-**todavía no** están puestas: sin ellas, `apps/web/lib/correo.ts` no simula en producción como
-en desarrollo — falla explícito (`CorreoNoConfigurado`), así que **el login no funciona en
-producción hasta que se configuren de verdad**. Es el comportamiento correcto (nunca fingir un
-envío que no pasó), pero significa acción pendiente: crear el dominio/API key en Resend y
-ponerlas en Vercel → Settings → Environment Variables (Production y Preview) antes de que
-alguien necesite entrar de verdad.
+| Variable | Qué |
+|---|---|
+| `AUTH_SECRET` | `openssl rand -base64 32`, una por entorno. Sin ella Auth.js truena al primer request. |
+| `AUTH_RESEND_KEY` | La API key de Resend (`re_...`). Correo por API HTTP, **no SMTP** — Vercel serverless no maneja bien SMTP (`Greeting never received`). |
+| `EMAIL_FROM` | `Cifra <algo@tudominio>` — el dominio tiene que estar verificado en Resend. |
+
+Sin `AUTH_RESEND_KEY`, `apps/web/lib/correo.ts` no simula en producción como en desarrollo:
+falla explícito (`CorreoNoConfigurado`), así que el login de producción no funciona hasta que
+esté puesta. Es a propósito — nunca fingir un envío que no pasó.
+
+`packages/db/prisma/datos-seed.mjs`: el usuario de `TODA7606258I7` usa un correo real
+(`jattonio@gmail.com`) justo para poder probar ese login de punta a punta; el resto del seed es
+`*.test`. Va de la mano del pendiente de arriba: cuando salga el contribuyente ficticio de
+producción, sale también ese usuario.

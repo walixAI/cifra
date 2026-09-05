@@ -93,9 +93,6 @@ importers:
       next-auth:
         specifier: 5.0.0-beta.32
         version: 5.0.0-beta.32(next@15.5.24(@babel/core@7.29.7(supports-color@7.2.0))(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(nodemailer@8.0.11)(react@19.2.8)
-      nodemailer:
-        specifier: 8.0.11
-        version: 8.0.11
       react:
         specifier: ^19.0.0
         version: 19.2.8
@@ -112,9 +109,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.1
-      '@types/nodemailer':
-        specifier: 8.0.1
-        version: 8.0.1
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.18
@@ -1616,9 +1610,6 @@ packages:
 
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
-
-  '@types/nodemailer@8.0.1':
-    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
 
   '@types/pg-pool@2.0.7':
     resolution: {integrity: sha512-U4CwmGVQcbEuqpyju8/ptOKg6gEC+Tqsvj2xS9o1g71bUh8twxnC6ZL5rZKCsGN0iyH0CwgUyc9VR5owNQF9Ng==}
@@ -4554,10 +4545,6 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/nodemailer@8.0.1':
-    dependencies:
-      '@types/node': 22.20.1
-
   '@types/pg-pool@2.0.7':
     dependencies:
       '@types/pg': 8.23.1
@@ -5513,7 +5500,8 @@ snapshots:
 
   node-releases@2.0.54: {}
 
-  nodemailer@8.0.11: {}
+  nodemailer@8.0.11:
+    optional: true
 
   nypm@0.6.9:
     dependencies:

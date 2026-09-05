@@ -1,15 +1,16 @@
 // Un solo camino de envío de correo para todo apps/web: el magic link de Auth.js (lib/auth.ts)
-// y el correo de invitación (lib/invitaciones.ts, paso 8) pasan por aquí. Resend por SMTP —
-// EMAIL_SERVER/EMAIL_FROM ya lo asumen así en .env.example y en handoff/DESPLIEGUE.md.
+// y el correo de invitación (lib/invitaciones.ts, paso 8) pasan por aquí.
 //
-// Sin EMAIL_SERVER configurado:
+// API HTTP de Resend, no SMTP: las funciones serverless de Vercel no manejan bien SMTP —
+// bloqueo de puertos y un handshake con conexión persistente que encaja mal con un runtime
+// efímero (el "Greeting never received" clásico). Una petición HTTP y ya.
+//
+// Sin AUTH_RESEND_KEY:
 //   - en desarrollo, se simula: el enlace queda impreso en consola con una etiqueta que no deja
-//     dudas de que no se mandó nada de verdad — nunca debe parecer que funcionó.
+//     dudas de que no se mandó nada de verdad.
 //   - en producción o preview, es un error explícito, no una simulación silenciosa. Un envío que
 //     "funciona" pero no manda nada es peor que uno que avisa que falta configurar Resend: se
 //     vuelve el estado `error` de la máquina de invitar (README §4.1), nunca un `sent` falso.
-
-import nodemailer from "nodemailer";
 
 export interface CorreoAEnviar {
   para: string;
@@ -20,19 +21,19 @@ export interface CorreoAEnviar {
 
 export class CorreoNoConfigurado extends Error {
   constructor() {
-    super("EMAIL_SERVER no está configurado. En producción esto no se simula — hay que ponerlo.");
+    super("AUTH_RESEND_KEY no está configurado. En producción esto no se simula — hay que ponerlo.");
     this.name = "CorreoNoConfigurado";
   }
 }
 
 export async function enviarCorreo(correo: CorreoAEnviar): Promise<{ simulado: boolean }> {
-  const servidor = process.env.EMAIL_SERVER;
+  const apiKey = process.env.AUTH_RESEND_KEY;
 
-  if (!servidor) {
+  if (!apiKey) {
     if (process.env.NODE_ENV === "production") throw new CorreoNoConfigurado();
 
     console.log(
-      `\n✉️  [correo simulado — falta EMAIL_SERVER, nada se mandó de verdad]\n` +
+      `\n✉️  [correo simulado — falta AUTH_RESEND_KEY, nada se mandó de verdad]\n` +
         `    para:    ${correo.para}\n` +
         `    asunto:  ${correo.asunto}\n` +
         `${correo.texto
@@ -44,13 +45,21 @@ export async function enviarCorreo(correo: CorreoAEnviar): Promise<{ simulado: b
   }
 
   const de = process.env.EMAIL_FROM ?? "Cifra <hola@cifra.mx>";
-  const transportador = nodemailer.createTransport(servidor);
-  await transportador.sendMail({
-    to: correo.para,
-    from: de,
-    subject: correo.asunto,
-    text: correo.texto,
-    html: correo.html,
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: de,
+      to: correo.para,
+      subject: correo.asunto,
+      html: correo.html,
+      text: correo.texto,
+    }),
   });
+
+  if (!res.ok) {
+    const detalle = await res.text().catch(() => "");
+    throw new Error(`Resend rechazó el envío (${res.status}): ${detalle}`);
+  }
   return { simulado: false };
 }

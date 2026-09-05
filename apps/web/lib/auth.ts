@@ -7,7 +7,7 @@
 // Vercel (Settings → Environment Variables) el mismo día que esto se despliegue.
 
 import NextAuth from "next-auth";
-import Nodemailer from "next-auth/providers/nodemailer";
+import Resend from "next-auth/providers/resend";
 import authConfig from "./auth.config";
 import { adaptadorUsuario } from "./adaptador-usuario";
 import { enviarCorreo } from "./correo";
@@ -16,12 +16,11 @@ const { handlers, auth: authNextAuth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: adaptadorUsuario(),
   providers: [
-    Nodemailer({
-      // El provider exige un `server` no vacío al construirse, aunque nunca lo use: el envío de
-      // verdad pasa siempre por sendVerificationRequest → enviarCorreo() (lib/correo.ts), que lee
-      // EMAIL_SERVER por su cuenta y decide ahí si simula (desarrollo) o falla explícito
-      // (producción). Este placeholder solo evita que next build truene sin EMAIL_SERVER puesto.
-      server: process.env.EMAIL_SERVER || "smtp://localhost:1025",
+    // Provider de Resend (API HTTP, no SMTP). El envío real pasa siempre por
+    // sendVerificationRequest → enviarCorreo() (lib/correo.ts), que decide ahí si simula
+    // (desarrollo sin AUTH_RESEND_KEY) o falla explícito (producción sin ella).
+    Resend({
+      apiKey: process.env.AUTH_RESEND_KEY,
       from: process.env.EMAIL_FROM ?? "Cifra <hola@cifra.mx>",
       // 24 horas: más largo que una sesión de trabajo típica, corto para no dejar un enlace
       // viejo dando vueltas en una bandeja de entrada.

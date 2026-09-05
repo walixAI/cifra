@@ -17,7 +17,7 @@ export default async function PaginaLogin({
     // signIn() redirige por dentro (a /login/verificar, o a /login?error=… si algo falla) con un
     // throw especial de Next — no se atrapa aquí porque atraparlo es exactamente lo que
     // cancelaría ese redirect.
-    await signIn("nodemailer", { email: correo, redirectTo: callbackUrl || "/" });
+    await signIn("resend", { email: correo, redirectTo: callbackUrl || "/" });
   }
 
   return (
