@@ -97,6 +97,9 @@ importers:
         specifier: ^19.0.0
         version: 19.2.8(react@19.2.8)
     devDependencies:
+      '@prisma/nextjs-monorepo-workaround-plugin':
+        specifier: 6.19.3
+        version: 6.19.3
       '@tailwindcss/postcss':
         specifier: ^4.0.0
         version: 4.3.3
@@ -1322,6 +1325,9 @@ packages:
 
   '@prisma/get-platform@6.19.3':
     resolution: {integrity: sha512-xFj1VcJ1N3MKooOQAGO0W5tsd0W2QzIvW7DD7c/8H14Zmp4jseeWAITm+w2LLoLrlhoHdPPh0NMZ8mfL6puoHA==}
+
+  '@prisma/nextjs-monorepo-workaround-plugin@6.19.3':
+    resolution: {integrity: sha512-lu3KrWToTwYrkEk1UHoMW4aqa69USu3yaG9+gnHmjeAQuCb804NHq0PvkS7Zd7D/ViDDrIKKQE5pzdwLn1EgoA==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -4282,6 +4288,8 @@ snapshots:
   '@prisma/get-platform@6.19.3':
     dependencies:
       '@prisma/debug': 6.19.3
+
+  '@prisma/nextjs-monorepo-workaround-plugin@6.19.3': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
