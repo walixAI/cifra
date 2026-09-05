@@ -104,3 +104,35 @@ export async function asegurarBaseLocal() {
 export async function borrarDatosLocales() {
   await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
+
+const HOSTS_LOCALES = new Set(["localhost", "127.0.0.1", "::1"]);
+
+/**
+ * Sale con un error ruidoso — dice a dónde iba a correr — si `url` no apunta a un host local y
+ * no se pasó la confirmación explícita. Para comandos destructivos (TRUNCATE + reseed) que por
+ * ergonomía de desarrollo asumen "esto es mi Postgres local": que `.env` tenga las cadenas de
+ * Neon puestas no debe bastar para que uno de esos comandos las use sin que alguien lo haya
+ * pedido a propósito. Pasó de verdad — ver la migración 20260905050613: `pnpm db:seed`, sin más,
+ * estuvo a un pelo de correr TRUNCATE contra producción; lo salvó que `cifra_app` no tiene
+ * privilegios de DDL, que es suerte, no diseño. Esto es el diseño.
+ *
+ * La confirmación exige escribir el host exacto (no un booleano que alguien deja puesto en su
+ * perfil de shell y olvida): `CONFIRMAR_DESTINO_REMOTO=<host>`.
+ */
+export function exigirDestinoLocal(url, { comando } = {}) {
+  const host = new URL(url).hostname;
+  if (HOSTS_LOCALES.has(host)) return;
+
+  const confirmacion = process.env.CONFIRMAR_DESTINO_REMOTO;
+  if (confirmacion === host) {
+    console.warn(`⚠️  ${comando ?? "Este comando"} corre contra «${host}» — confirmado explícitamente.\n`);
+    return;
+  }
+
+  console.error(
+    `\n✖ ${comando ?? "Este comando"} está a punto de correr contra «${host}», no un Postgres local.\n` +
+      `  Si es a propósito, corre de nuevo con CONFIRMAR_DESTINO_REMOTO=${host}.\n` +
+      `  Si no lo es, revisa DATABASE_URL/DIRECT_URL en tu entorno o en .env — ahí es de donde salió.\n`,
+  );
+  process.exit(1);
+}

@@ -7,19 +7,30 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { asegurarBaseLocal } from "./db-local.mjs";
 
+const HOSTS_LOCALES = new Set(["localhost", "127.0.0.1", "::1"]);
 const directorioPaquete = dirname(dirname(fileURLToPath(import.meta.url)));
 const cliPrisma = join(directorioPaquete, "node_modules", "prisma", "build", "index.js");
 
 async function main() {
   const local = await asegurarBaseLocal();
-  process.env.DATABASE_URL = local.url;
-  process.env.DIRECT_URL = local.url;
+  // Solo pisa las variables de entorno en el Postgres local propio — mismo motivo que seed.mjs:
+  // en Neon, local.url es DATABASE_URL (cifra_app), y pisar DIRECT_URL con eso es incorrecto
+  // aunque Studio no migre nada con esa cadena.
+  if (local.esLocal) {
+    process.env.DATABASE_URL = local.url;
+    process.env.DIRECT_URL = local.url;
+  }
 
-  console.log(
-    local.esLocal
-      ? `→ Sin DATABASE_URL en el entorno: usando Postgres local en ${local.url}`
-      : `→ Usando DATABASE_URL del entorno`,
-  );
+  if (local.esLocal) {
+    console.log(`→ Sin DATABASE_URL en el entorno: usando Postgres local en ${local.url}`);
+  } else {
+    const host = new URL(local.url).hostname;
+    console.log(
+      HOSTS_LOCALES.has(host)
+        ? `→ Usando DATABASE_URL del entorno (${host})`
+        : `⚠️  Usando DATABASE_URL del entorno — esto abre Studio contra «${host}», no un Postgres local. Studio permite editar y borrar filas desde la UI.`,
+    );
+  }
 
   try {
     execFileSync(process.execPath, [cliPrisma, "studio"], {

@@ -5,7 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { asegurarBaseLocal, asegurarContrasenaApp } from "../scripts/db-local.mjs";
+import { asegurarBaseLocal, asegurarContrasenaApp, exigirDestinoLocal } from "../scripts/db-local.mjs";
 import { sembrarDatos } from "./datos-seed.mjs";
 
 const directorioPaquete = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -21,6 +21,11 @@ async function main() {
   if (local.esLocal) {
     process.env.DATABASE_URL = local.url;
     process.env.DIRECT_URL = local.url;
+  } else {
+    // No es el Postgres local: antes de correr migrate deploy (o, si el host fuera de verdad
+    // vacío, el TRUNCATE de más abajo) contra lo que sea que haya en DATABASE_URL, exige que
+    // sea localhost o una confirmación explícita. Ver exigirDestinoLocal().
+    exigirDestinoLocal(local.url, { comando: "pnpm db:seed" });
   }
 
   console.log(
