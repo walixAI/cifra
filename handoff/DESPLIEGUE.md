@@ -198,3 +198,20 @@ Debe aparecer:
 
 Si CI pasa pero no ves Vercel/Neon, es que faltan los pasos 2–3 (la integración no está
 conectada todavía).
+
+---
+
+## 6 · Pendientes antes de usuarios reales
+
+Dos cosas temporales que entraron para poder verificar el paso 6 contra Neon real y que no
+deben quedarse:
+
+- **El bypass de `auth()`** (`apps/web/lib/auth.ts`, variable de entorno `AUTH_BYPASS_SECRETO`
+  en Vercel + cookie `cifra_auth_bypass`) — existe solo porque el paso 8 (Auth.js con magic
+  link) todavía no está. Cada uso deja un renglón en Bitácora (`accion: "bypass_dev_auth"`) y
+  un `console.warn`. Se borra en cuanto el paso 8 quede funcionando: el TODO exacto está al
+  inicio de `auth.ts`, y la variable se quita del entorno de Vercel el mismo día.
+- **El contribuyente ficticio en producción** (`TODA7606258I7`, sembrado por
+  `packages/db/prisma/seed.mjs`/`datos-seed.mjs`) — vive en el Neon de producción para poder
+  probar la vertical de Impuestos de punta a punta contra datos reales de RLS. Sacarlo antes de
+  invitar al primer usuario real: no debe compartir base con contribuyentes de verdad.
