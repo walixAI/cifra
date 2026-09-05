@@ -592,13 +592,91 @@ describe("acceso_por_token (paso 8, fase 3): el token es la autorización, y sol
     }
   });
 
-  it("aceptar (UPDATE) también pasa por la política: se puede activar la fila con su token", async () => {
-    const usuario = await dueno.usuario.create({ data: { email: "invitado@token.test", nombre: "Invitado Token" } });
-    const actualizada = await prismaParaToken(tokenBueno).acceso.update({
-      where: { id: idAcceso },
-      data: { usuario_id: usuario.id, estado: "activo" },
+  // ── Escritura, no solo lectura ──────────────────────────────────────────────
+  // acceso_propio y acceso_por_token nacieron FOR ALL sin WITH CHECK; migración
+  // 20260905171045 las bajó a FOR SELECT y dejó la aceptación en acceso_por_token_activar
+  // (FOR UPDATE, WITH CHECK) + el trigger acceso_token_solo_activa.
+
+  async function sembrarInvitacion(sufijo: string, rol: "contador" | "solo_lectura" = "contador") {
+    const org = await dueno.organizacion.create({ data: { nombre: `Org ${sufijo}`, tipo: "despacho" } });
+    const c = await dueno.contribuyente.create({
+      data: { organizacion_id: org.id, slug: `esc-${sufijo}`, rfc: `ESC0000${sufijo}XX`, nombre: `Esc ${sufijo}`, tipo_persona: "moral" },
     });
-    expect(actualizada.estado).toBe("activo");
-    expect(actualizada.usuario_id).toBe(usuario.id);
+    const token = `33333333-3333-3333-3333-3333333333${sufijo}`;
+    const acc = await dueno.acceso.create({
+      data: { contribuyente_id: c.id, email: `esc-${sufijo}@token.test`, rol, estado: "invitado", expira_en: new Date(Date.now() + 9e8), token },
+    });
+    return { token, id: acc.id, contribuyenteId: c.id };
+  }
+
+  it("aceptar (UPDATE) sí pasa: invitado → activo y usuario_id, con el token", async () => {
+    const inv = await sembrarInvitacion("01");
+    const u = await dueno.usuario.create({ data: { email: "esc-01@token.test" } });
+    const r = await prismaParaToken(inv.token).acceso.update({
+      where: { id: inv.id },
+      data: { usuario_id: u.id, estado: "activo" },
+    });
+    expect(r.estado).toBe("activo");
+    expect(r.usuario_id).toBe(u.id);
+  });
+
+  it("con un token válido NO se puede cambiar el rol de esa invitación", async () => {
+    const inv = await sembrarInvitacion("02", "solo_lectura");
+    const u = await dueno.usuario.create({ data: { email: "esc-02@token.test" } });
+    await expect(
+      prismaParaToken(inv.token).acceso.update({
+        where: { id: inv.id },
+        data: { usuario_id: u.id, estado: "activo", rol: "contador" },
+      }),
+    ).rejects.toThrow(/solo puede fijar estado=activo y usuario_id/);
+    // La fila quedó intacta.
+    const acc = await dueno.acceso.findUniqueOrThrow({ where: { id: inv.id } });
+    expect(acc.rol).toBe("solo_lectura");
+    expect(acc.estado).toBe("invitado");
+  });
+
+  it("con un token válido NO se puede mover la invitación a otro contribuyente", async () => {
+    const inv = await sembrarInvitacion("03");
+    const otro = await sembrarInvitacion("04");
+    const u = await dueno.usuario.create({ data: { email: "esc-03@token.test" } });
+    await expect(
+      prismaParaToken(inv.token).acceso.update({
+        where: { id: inv.id },
+        data: { usuario_id: u.id, estado: "activo", contribuyente_id: otro.contribuyenteId },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("un usuario NO puede subirse el rol en su propia fila de acceso (acceso_propio es FOR SELECT)", async () => {
+    const inv = await sembrarInvitacion("05", "solo_lectura");
+    const u = await dueno.usuario.create({ data: { email: "esc-05@token.test" } });
+    // Se acepta primero (por token), queda como solo_lectura activo con usuario_id = u.
+    await prismaParaToken(inv.token).acceso.update({
+      where: { id: inv.id },
+      data: { usuario_id: u.id, estado: "activo" },
+    });
+    // Ahora u intenta, "porque es su fila", subirse a contador. acceso_propio ya no cubre UPDATE.
+    await expect(
+      prismaParaUsuario(u.id).acceso.update({ where: { id: inv.id }, data: { rol: "contador" } }),
+    ).rejects.toThrow();
+    const acc = await dueno.acceso.findUniqueOrThrow({ where: { id: inv.id } });
+    expect(acc.rol).toBe("solo_lectura");
+  });
+
+  it("la cartera (cartera_por_acceso es FOR SELECT) no puede escribir resumen_contribuyente", async () => {
+    const inv = await sembrarInvitacion("06");
+    const u = await dueno.usuario.create({ data: { email: "esc-06@token.test" } });
+    await prismaParaToken(inv.token).acceso.update({ where: { id: inv.id }, data: { usuario_id: u.id, estado: "activo" } });
+    await dueno.resumenContribuyente.create({
+      data: { contribuyente_id: inv.contribuyenteId, periodo: "2026-08", ingresos_centavos: 1n },
+    });
+    await expect(
+      prismaParaUsuario(u.id).resumenContribuyente.updateMany({
+        where: { contribuyente_id: inv.contribuyenteId },
+        data: { ingresos_centavos: 999_999n },
+      }),
+    ).resolves.toMatchObject({ count: 0 }); // FOR SELECT: la fila no es visible para escribir
+    const r = await dueno.resumenContribuyente.findFirstOrThrow({ where: { contribuyente_id: inv.contribuyenteId } });
+    expect(r.ingresos_centavos).toBe(1n);
   });
 });
