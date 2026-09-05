@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "build:verificar": "cross-env NEXT_DIST_DIR=.next-verificar next build",
+    "build": "pnpm --filter @cifra/db run prisma:generate && next build",
+    "build:verificar": "pnpm --filter @cifra/db run prisma:generate && cross-env NEXT_DIST_DIR=.next-verificar next build",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },

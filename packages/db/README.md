@@ -13,7 +13,8 @@ scripts/generar-migracion.mjs autoría de migraciones nuevas sin Neon ni Docker 
 scripts/studio.mjs            `pnpm db:studio`
 src/cliente.ts                singleton sin alcance — solo plataforma, nunca datos con dinero
 src/alcance.ts                prismaPara(contribuyenteId) — el cliente que sí deben usar los handlers
-src/generated/client/         cliente de Prisma generado (gitignored, `pnpm prisma:generate`)
+src/generated/client/         cliente de Prisma generado (gitignored, `pnpm prisma:generate`) —
+                               ver nota de Vercel más abajo
 test/aislamiento.test.ts      la prueba que decide si el resto está construido sobre arena
 test/pg-embebido.ts           Postgres real embebido para esa prueba — sin Docker, sin Neon
 ```
@@ -65,6 +66,23 @@ como emisor de honorarios contables en los gastos de TODA, a propósito) con:
   siendo el de la organización personal. Por diseño (§2 del documento de inquilinos, "un admin
   de despacho no hereda acceso a los libros"), Ana **no** tiene acceso automático a los otros
   dos clientes del despacho — solo a los que se le concedieron explícitamente.
+
+## El cliente generado y Vercel: dos disparadores, no uno
+
+Este paquete trae `"postinstall": "prisma generate --schema=./prisma/schema.prisma"` — se
+regenera solo en cualquier `pnpm install` desde cero (clon nuevo, CI). No basta por sí solo en
+Vercel: con caché tibia, `pnpm install` puede reportar `Already up to date` y saltarse por
+completo los scripts de instalación aunque `src/generated/client/` (que vive fuera de
+`node_modules`, y por lo tanto fuera de lo que ese caché conserva) ya no exista — pnpm decide
+esto por el lockfile, no por lo que hay en disco. Pasó de verdad: un redeploy con caché
+restaurada volvió a tronar con `Can't resolve './generated/client'` después de que un
+`pnpm install` limpio ya lo había arreglado.
+
+Por eso `apps/web` regenera el cliente también en su propio `build`
+(`pnpm --filter @cifra/db run prisma:generate && next build`, ver `apps/web/package.json`) — no
+porque el arreglo viva ahí, sino porque es el único paso que Vercel garantiza correr en cada
+build, con o sin caché. Si `apps/trabajos` alguna vez se despliega detrás de un caché parecido,
+necesita el mismo refuerzo en su propio arranque.
 
 ## Conectar a Neon
 
