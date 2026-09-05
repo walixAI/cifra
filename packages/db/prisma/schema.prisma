@@ -41,6 +41,19 @@ model Usuario {
   @@map("usuario")
 }
 
+// Token del magic link de Auth.js (paso 8). Fuera de RLS, igual que Usuario — no lleva
+// contribuyente_id, es identidad, no dinero. El adaptador a mano en apps/web/lib/adaptador-usuario
+// lo borra al usarlo (un solo uso) y el correo nunca se guarda cifrado: es un token de un solo
+// uso de vida corta, no una credencial fiscal.
+model TokenVerificacion {
+  identificador String // el correo al que se le mandó el enlace
+  token         String   @unique
+  expira_en     DateTime
+
+  @@unique([identificador, token])
+  @@map("token_verificacion")
+}
+
 // ── Inquilino ────────────────────────────────────────────────────────────────
 
 enum TipoOrganizacion {

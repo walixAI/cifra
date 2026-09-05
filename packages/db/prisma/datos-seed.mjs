@@ -564,6 +564,37 @@ export async function sembrarDatos(prisma) {
         token: randomUUID(),
       },
     });
+
+    // Ana también lleva la contabilidad de estos dos, no solo la de TODA — para poder probar la
+    // cartera del despacho (paso 8) con más de un cliente de verdad.
+    await prisma.acceso.create({
+      data: {
+        contribuyente_id: contribuyente.id,
+        usuario_id: ana.id,
+        email: ana.email,
+        rol: "contador",
+        estado: "activo",
+        expira_en: new Date(Date.now() + AÑO_MS),
+      },
+    });
+
+    // Resumen precalculado mínimo — lo que lee la cartera, nunca recalcula. A diferencia de TODA
+    // (paso 5, con el fixture completo), estos dos son clientes recién dados de alta: cifras
+    // modestas y sin advertencias, solo para que la fila de la cartera no esté vacía.
+    await prisma.resumenContribuyente.create({
+      data: {
+        contribuyente_id: contribuyente.id,
+        periodo: "2026-08",
+        ingresos_centavos: 5_420_000n,
+        gastos_centavos: 3_180_000n,
+        iva_centavos: 358_000n,
+        isr_centavos: 612_000n,
+        cfdi_sin_clasificar: 2,
+        movimientos_sin_conciliar: 1,
+        cuadre_estado: "ok",
+        cierre_pasos_completos: 3,
+      },
+    });
   }
 
   return { orgPersonal, toda, orgDespacho };

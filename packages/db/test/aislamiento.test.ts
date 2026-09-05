@@ -18,6 +18,8 @@ import { levantarPgEmbebido, type PgEmbebido } from "./pg-embebido";
 
 let entorno: PgEmbebido;
 let prismaPara: typeof import("../src/alcance").prismaPara;
+let prismaParaUsuario: typeof import("../src/alcance").prismaParaUsuario;
+let prismaSingleton: typeof import("../src/cliente").prisma;
 let PrismaClient: typeof import("../src/generated/client").PrismaClient;
 let dueno: InstanceType<typeof PrismaClient>;
 
@@ -28,8 +30,12 @@ beforeAll(async () => {
   // importar el paquete, y apuntando a cifra_app — el mismo rol con el que se conecta la app.
   process.env.DATABASE_URL = entorno.urlApp;
   process.env.DIRECT_URL = entorno.urlApp;
+  // Idem: enciende el evento "query" del singleton ANTES de que se construya, para poder contar
+  // consultas reales en la prueba de la cartera (paso 8) — ver src/cliente.ts.
+  process.env.PRISMA_LOG_QUERIES = "true";
 
-  ({ prismaPara } = await import("../src/alcance"));
+  ({ prismaPara, prismaParaUsuario } = await import("../src/alcance"));
+  ({ prisma: prismaSingleton } = await import("../src/cliente"));
   ({ PrismaClient } = await import("../src/generated/client"));
 
   // Cliente aparte, como dueño de las tablas (superusuario): solo para sembrar. Con FORCE ROW
@@ -350,5 +356,161 @@ describe("aislamiento por contribuyente (RLS)", () => {
       },
     });
     expect(ok.contribuyente_id).toBe(orgA.contribuyente.id);
+  });
+});
+
+// ── Paso 8 · la cartera del despacho: la autorización la deriva la política, no la app ──────
+//
+// ARQUITECTURA-MULTIINQUILINO.md §6: "la cartera no puede ser N consultas sobre N clientes []
+// es la única que usa un IN explícito sobre los contribuyentes a los que el usuario tiene
+// Acceso". Dos políticas nuevas y permisivas hacen esto posible sin que cifra_app deje de estar
+// sujeto a RLS — y sin que RLS deje de ser la red de seguridad para esta tabla: acceso_propio
+// (¿a cuáles contribuyentes tengo Acceso?, resuelto sin conocer ninguno de antemano) y
+// cartera_por_acceso (resumen_contribuyente visible si el usuario de la sesión tiene un Acceso
+// activo a ese contribuyente — la subconsulta vive DENTRO de la política, contra `acceso`, no
+// contra una lista que la aplicación arma y entrega). El único dato que aporta la app es
+// app.usuario_id, vía prismaParaUsuario; qué contribuyentes le tocan lo decide Postgres.
+describe("cartera del despacho (paso 8): la autorización se deriva de acceso, no de una lista", () => {
+  let contadora: { id: string; email: string };
+  let intruso: { id: string; email: string };
+  let idsDespacho: string[];
+  let contribuyenteAjeno: { id: string };
+
+  beforeAll(async () => {
+    const despacho = await dueno.organizacion.create({
+      data: { nombre: "Despacho de prueba", tipo: "despacho" },
+    });
+    contadora = await dueno.usuario.create({
+      data: { email: "contadora@despacho-cartera.test", nombre: "Contadora de prueba" },
+    });
+    intruso = await dueno.usuario.create({
+      data: { email: "intruso@fuera.test", nombre: "Sin acceso a nada" },
+    });
+
+    const contribuyentes = [];
+    for (let i = 0; i < 3; i++) {
+      const contribuyente = await dueno.contribuyente.create({
+        data: {
+          organizacion_id: despacho.id,
+          slug: `cliente-cartera-${i}`,
+          rfc: `CAR00000${i}XX${i}`,
+          nombre: `Cliente cartera ${i}`,
+          tipo_persona: "moral",
+        },
+      });
+      await dueno.acceso.create({
+        data: {
+          contribuyente_id: contribuyente.id,
+          usuario_id: contadora.id,
+          email: contadora.email,
+          rol: "contador",
+          estado: "activo",
+          expira_en: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        },
+      });
+      await dueno.resumenContribuyente.create({
+        data: {
+          contribuyente_id: contribuyente.id,
+          periodo: "2026-08",
+          ingresos_centavos: BigInt(1000 + i),
+        },
+      });
+      contribuyentes.push(contribuyente);
+    }
+    idsDespacho = contribuyentes.map((c) => c.id);
+
+    // Un cuarto contribuyente, de otro dueño, con su propio resumen — la contadora NO tiene
+    // Acceso aquí. Si algo se cuela, es exactamente esta fila.
+    contribuyenteAjeno = await dueno.contribuyente.create({
+      data: {
+        organizacion_id: despacho.id,
+        slug: "cliente-ajeno",
+        rfc: "AJE000000XX0",
+        nombre: "Cliente ajeno",
+        tipo_persona: "moral",
+      },
+    });
+    await dueno.resumenContribuyente.create({
+      data: { contribuyente_id: contribuyenteAjeno.id, periodo: "2026-08", ingresos_centavos: 999n },
+    });
+  });
+
+  /** Cuenta los SELECT reales contra una tabla mientras corre `fn` — no a ojo. */
+  async function contarConsultas<T>(tabla: string, fn: () => Promise<T>) {
+    let cuenta = 0;
+    const contador = (evento: { query: string }) => {
+      const q = evento.query.trim();
+      if (/^select/i.test(q) && q.includes(`"${tabla}"`)) cuenta++;
+    };
+    (prismaSingleton as unknown as { $on: (e: "query", cb: typeof contador) => void }).$on(
+      "query",
+      contador,
+    );
+    const resultado = await fn();
+    return { resultado, cuenta };
+  }
+
+  it("la cartera trae los 3 clientes de la contadora en exactamente una consulta a acceso y una a resumen_contribuyente", async () => {
+    const { resultado: accesos, cuenta: consultasAcceso } = await contarConsultas("acceso", () =>
+      prismaParaUsuario(contadora.id).acceso.findMany({
+        where: { estado: "activo" },
+        select: { contribuyente_id: true },
+      }),
+    );
+    expect(consultasAcceso).toBe(1);
+    const ids = accesos.map((a) => a.contribuyente_id);
+    expect(ids.sort()).toEqual([...idsDespacho].sort());
+    expect(ids).not.toContain(contribuyenteAjeno.id);
+
+    // Una sola llamada, SIN pasarle la lista de ids: la política resuelve sola, contra `acceso`,
+    // a cuáles contribuyentes tiene derecho la sesión. El `where` de abajo ni siquiera filtra por
+    // contribuyente — si trae solo 3 filas es la política, no el código, quien decide.
+    const { resultado: resumenes, cuenta: consultasResumen } = await contarConsultas(
+      "resumen_contribuyente",
+      () => prismaParaUsuario(contadora.id).resumenContribuyente.findMany({ where: { periodo: "2026-08" } }),
+    );
+    expect(consultasResumen).toBe(1);
+    expect(resumenes).toHaveLength(3);
+    expect(resumenes.map((r) => r.contribuyente_id).sort()).toEqual([...idsDespacho].sort());
+  });
+
+  it("un usuario sin Acceso no ve ni un contribuyente, y por lo tanto ningún resumen", async () => {
+    const accesos = await prismaParaUsuario(intruso.id).acceso.findMany({
+      where: { estado: "activo" },
+      select: { contribuyente_id: true },
+    });
+    expect(accesos).toHaveLength(0);
+
+    const resumenes = await prismaParaUsuario(intruso.id).resumenContribuyente.findMany({
+      where: { periodo: "2026-08" },
+    });
+    expect(resumenes).toHaveLength(0);
+  });
+
+  it("pedir DIRECTO el contribuyente ajeno no sirve de nada: la política lo bloquea, no el código", async () => {
+    // La contadora no tiene Acceso a contribuyenteAjeno. Si el `where` fuera lo único que
+    // protegiera, pedirlo explícito por id lo traería. Con cartera_por_acceso resolviendo la
+    // autorización dentro de la política (subconsulta contra `acceso`, no una lista que llegó de
+    // fuera), la fila no existe para esta sesión aunque el código la pida por su nombre.
+    const resumenes = await prismaParaUsuario(contadora.id).resumenContribuyente.findMany({
+      where: { contribuyente_id: contribuyenteAjeno.id },
+    });
+    expect(resumenes).toHaveLength(0);
+
+    // Y sin alcance de ningún tipo (ni contribuyente_id ni usuario_id fijados), la política
+    // vieja de siempre sigue fallando cerrado sobre la misma fila.
+    const cliente = new ClientePg({ connectionString: entorno.urlApp });
+    await cliente.connect();
+    try {
+      await cliente.query("BEGIN");
+      const sinAlcance = await cliente.query(
+        "SELECT 1 FROM resumen_contribuyente WHERE contribuyente_id = $1",
+        [contribuyenteAjeno.id],
+      );
+      await cliente.query("COMMIT");
+      expect(sinAlcance.rows).toHaveLength(0);
+    } finally {
+      await cliente.end();
+    }
   });
 });

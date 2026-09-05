@@ -65,6 +65,25 @@ BEGIN
   END LOOP;
 END $$;
 
+-- 2.1 · Cartera del despacho: la autorización se deriva de `acceso`, no de una lista que la
+-- app entregue ------------------------------------------------------------------------------
+-- Permisivas, se combinan con OR con la política de arriba en cada tabla — nunca la reemplazan.
+-- El único dato que aporta la app es app.usuario_id; qué contribuyentes le tocan lo decide la
+-- subconsulta contra `acceso`, dentro de la propia política — si eso viviera en una lista
+-- armada por la app (una versión anterior de esto lo hacía), RLS dejaría de ser la red de
+-- seguridad para esta tabla: bastaría un bug al armar la lista para que la política la
+-- aprobara. Cuerpo real en prisma/migrations/20260905050613_auth_cartera/migration.sql (paso 8).
+
+CREATE POLICY acceso_propio ON public.acceso
+  USING (usuario_id = NULLIF(current_setting('app.usuario_id', true), '')::uuid);
+
+CREATE POLICY cartera_por_acceso ON public.resumen_contribuyente
+  USING (contribuyente_id IN (
+    SELECT contribuyente_id FROM acceso
+    WHERE usuario_id = NULLIF(current_setting('app.usuario_id', true), '')::uuid
+      AND estado = 'activo'
+  ));
+
 -- 3 · Verificación -----------------------------------------------------------
 -- Qué tablas quedaron protegidas y cuáles no (revisa la lista: si alguna tabla
 -- con dinero adentro no aparece con rowsecurity = true, le falta la columna).

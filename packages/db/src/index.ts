@@ -3,7 +3,7 @@
 // PRIMEROS-PASOS.md.
 
 export { prisma } from "./cliente";
-export { prismaPara, type ClienteConAlcance } from "./alcance";
+export { prismaPara, prismaParaUsuario, type ClienteConAlcance } from "./alcance";
 
 export { PrismaClient, Prisma } from "./generated/client";
 export type * from "./generated/client";

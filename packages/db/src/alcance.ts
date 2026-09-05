@@ -32,3 +32,32 @@ export function prismaPara(contribuyenteId: string) {
 }
 
 export type ClienteConAlcance = ReturnType<typeof prismaPara>;
+
+/**
+ * Cliente con alcance a UN usuario (no a un contribuyente). Fija `app.usuario_id` en vez de
+ * `app.contribuyente_id`. Es lo único que necesita la cartera del despacho
+ * (ARQUITECTURA-MULTIINQUILINO.md §6): con este cliente, `acceso.findMany()` devuelve
+ * exactamente los `Acceso` de esa persona (política `acceso_propio`), y
+ * `resumenContribuyente.findMany()` devuelve exactamente los resúmenes de los contribuyentes a
+ * los que tiene `Acceso` activo (política `cartera_por_acceso`) — en ambos casos porque la
+ * política resuelve la autorización consultando `acceso` ella misma, no porque la app le haya
+ * pasado una lista de contribuyentes. El único dato que aporta esta función es la identidad del
+ * usuario; qué ve, lo decide Postgres. Una sola llamada por tabla, sin importar cuántos
+ * contribuyentes tenga: Postgres resuelve la subconsulta de la política como parte del mismo
+ * plan, no como una ida y vuelta aparte de la aplicación.
+ */
+export function prismaParaUsuario(usuarioId: string) {
+  return prisma.$extends({
+    query: {
+      $allModels: {
+        async $allOperations({ args, query }) {
+          const [, resultado] = await prisma.$transaction([
+            prisma.$executeRaw`SELECT set_config('app.usuario_id', ${usuarioId}, true)`,
+            query(args),
+          ]);
+          return resultado;
+        },
+      },
+    },
+  });
+}
