@@ -84,6 +84,15 @@ CREATE POLICY cartera_por_acceso ON public.resumen_contribuyente
       AND estado = 'activo'
   ));
 
+-- 2.2 · Aceptar una invitación por su token ---------------------------------------------------
+-- Quien abre el enlace no tiene sesión con alcance a ningún contribuyente. El token (alto en
+-- entropía, único) ES la autorización para ver esa fila — como un enlace de recuperación de
+-- contraseña. La política deriva el permiso de un hecho que quien pide demuestra, no de una
+-- lista. Cuerpo real en prisma/migrations/20260905153614_invitacion_por_token/migration.sql.
+
+CREATE POLICY acceso_por_token ON public.acceso
+  USING (token IS NOT NULL AND token = NULLIF(current_setting('app.token_invitacion', true), ''));
+
 -- 3 · Verificación -----------------------------------------------------------
 -- Qué tablas quedaron protegidas y cuáles no (revisa la lista: si alguna tabla
 -- con dinero adentro no aparece con rowsecurity = true, le falta la columna).

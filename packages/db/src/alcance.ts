@@ -61,3 +61,27 @@ export function prismaParaUsuario(usuarioId: string) {
     },
   });
 }
+
+/**
+ * Cliente con alcance a UNA invitación por su token. Fija `app.token_invitacion` — solo lo
+ * aprovecha la política `acceso_por_token` de rls.sql (paso 8, fase 3), y solo sobre `acceso`:
+ * quien abre el enlace de invitación aún no tiene sesión con alcance a ningún contribuyente, y
+ * el token (único, alto en entropía) es la autorización para ver y aceptar esa fila. Deja de
+ * servir en cuanto la invitación se acepta o se revoca — el `where` de la consulta sigue
+ * filtrando por token igual, defensa en profundidad.
+ */
+export function prismaParaToken(token: string) {
+  return prisma.$extends({
+    query: {
+      $allModels: {
+        async $allOperations({ args, query }) {
+          const [, resultado] = await prisma.$transaction([
+            prisma.$executeRaw`SELECT set_config('app.token_invitacion', ${token}, true)`,
+            query(args),
+          ]);
+          return resultado;
+        },
+      },
+    },
+  });
+}

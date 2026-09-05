@@ -19,6 +19,7 @@ import { levantarPgEmbebido, type PgEmbebido } from "./pg-embebido";
 let entorno: PgEmbebido;
 let prismaPara: typeof import("../src/alcance").prismaPara;
 let prismaParaUsuario: typeof import("../src/alcance").prismaParaUsuario;
+let prismaParaToken: typeof import("../src/alcance").prismaParaToken;
 let prismaSingleton: typeof import("../src/cliente").prisma;
 let PrismaClient: typeof import("../src/generated/client").PrismaClient;
 let dueno: InstanceType<typeof PrismaClient>;
@@ -34,7 +35,7 @@ beforeAll(async () => {
   // consultas reales en la prueba de la cartera (paso 8) — ver src/cliente.ts.
   process.env.PRISMA_LOG_QUERIES = "true";
 
-  ({ prismaPara, prismaParaUsuario } = await import("../src/alcance"));
+  ({ prismaPara, prismaParaUsuario, prismaParaToken } = await import("../src/alcance"));
   ({ prisma: prismaSingleton } = await import("../src/cliente"));
   ({ PrismaClient } = await import("../src/generated/client"));
 
@@ -512,5 +513,92 @@ describe("cartera del despacho (paso 8): la autorización se deriva de acceso, n
     } finally {
       await cliente.end();
     }
+  });
+});
+
+// ── Paso 8 (fase 3) · aceptar una invitación por su token ──────────────────────────────────
+//
+// `acceso` está bajo RLS por contribuyente_id, pero quien abre el enlace de invitación aún no
+// tiene sesión con alcance a ningún contribuyente. La política acceso_por_token deja ver la
+// fila a quien demuestre conocer el token (único, alto en entropía), y solo esa fila.
+describe("acceso_por_token (paso 8, fase 3): el token es la autorización, y solo para su fila", () => {
+  let tokenBueno: string;
+  let idAcceso: string;
+  let idOtroContribuyente: string;
+
+  beforeAll(async () => {
+    const org = await dueno.organizacion.create({
+      data: { nombre: "Org invitación token", tipo: "despacho" },
+    });
+    const c1 = await dueno.contribuyente.create({
+      data: { organizacion_id: org.id, slug: "inv-token-1", rfc: "ITK000000XX1", nombre: "Inv token 1", tipo_persona: "moral" },
+    });
+    const c2 = await dueno.contribuyente.create({
+      data: { organizacion_id: org.id, slug: "inv-token-2", rfc: "ITK000000XX2", nombre: "Inv token 2", tipo_persona: "moral" },
+    });
+    idOtroContribuyente = c2.id;
+    tokenBueno = "11111111-1111-1111-1111-111111111111";
+    const acc = await dueno.acceso.create({
+      data: {
+        contribuyente_id: c1.id,
+        email: "invitado@token.test",
+        rol: "contador",
+        estado: "invitado",
+        expira_en: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        token: tokenBueno,
+      },
+    });
+    idAcceso = acc.id;
+    // Otra fila, otro contribuyente, con su propio token — no debe verse con el token bueno.
+    await dueno.acceso.create({
+      data: {
+        contribuyente_id: c2.id,
+        email: "otro@token.test",
+        rol: "captura",
+        estado: "invitado",
+        expira_en: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        token: "22222222-2222-2222-2222-222222222222",
+      },
+    });
+  });
+
+  it("con el token bueno se ve exactamente esa fila", async () => {
+    const acc = await prismaParaToken(tokenBueno).acceso.findFirst({ where: { token: tokenBueno } });
+    expect(acc?.id).toBe(idAcceso);
+    expect(acc?.email).toBe("invitado@token.test");
+  });
+
+  it("con un token que no existe, cero filas", async () => {
+    const acc = await prismaParaToken("99999999-9999-9999-9999-999999999999").acceso.findFirst();
+    expect(acc).toBeNull();
+  });
+
+  it("con el token bueno NO se ve la fila del otro contribuyente, aunque se pida sin filtro", async () => {
+    const filas = await prismaParaToken(tokenBueno).acceso.findMany();
+    expect(filas).toHaveLength(1);
+    expect(filas[0]?.contribuyente_id).not.toBe(idOtroContribuyente);
+  });
+
+  it("sin fijar el token (ni contribuyente_id ni usuario_id), la fila no se ve — falla cerrado", async () => {
+    const cliente = new ClientePg({ connectionString: entorno.urlApp });
+    await cliente.connect();
+    try {
+      await cliente.query("BEGIN");
+      const filas = await cliente.query("SELECT id FROM acceso WHERE token = $1", [tokenBueno]);
+      await cliente.query("COMMIT");
+      expect(filas.rows).toHaveLength(0);
+    } finally {
+      await cliente.end();
+    }
+  });
+
+  it("aceptar (UPDATE) también pasa por la política: se puede activar la fila con su token", async () => {
+    const usuario = await dueno.usuario.create({ data: { email: "invitado@token.test", nombre: "Invitado Token" } });
+    const actualizada = await prismaParaToken(tokenBueno).acceso.update({
+      where: { id: idAcceso },
+      data: { usuario_id: usuario.id, estado: "activo" },
+    });
+    expect(actualizada.estado).toBe("activo");
+    expect(actualizada.usuario_id).toBe(usuario.id);
   });
 });

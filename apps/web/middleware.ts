@@ -10,7 +10,9 @@ export const { auth } = NextAuth(authConfig);
 export default auth;
 
 export const config = {
-  // Todo menos /api (los route handlers responden su propio 401/404 vía contexto(), nunca un
-  // redirect HTML), /login, y los estáticos de Next.
-  matcher: ["/((?!api|login|_next/static|_next/image|favicon\\.ico).*)"],
+  // Todo menos: /api (los route handlers responden su propio 401/404 vía contexto(), nunca un
+  // redirect HTML); /login; /invitaciones (esa página maneja su propio flujo de sesión, con el
+  // correo del invitado prellenado — el middleware lo mandaría a /login sin ese dato); y los
+  // estáticos de Next.
+  matcher: ["/((?!api|login|invitaciones|_next/static|_next/image|favicon\\.ico).*)"],
 };

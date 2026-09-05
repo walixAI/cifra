@@ -184,6 +184,7 @@ model Invitacion {
   email           String
   rol             RolOrganizacion
   token           String          @unique
+  creada_en       DateTime        @default(now())
   expira_en       DateTime
   aceptada_en     DateTime?
 

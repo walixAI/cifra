@@ -12,3 +12,5 @@ export * from "./impuestos/isr";
 
 export * from "./contabilidad/cuadre";
 export * from "./contabilidad/poliza";
+
+export * from "./invitaciones/estado";
